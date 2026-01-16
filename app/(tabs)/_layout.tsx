@@ -31,6 +31,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="departments/[id]"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Configurações',

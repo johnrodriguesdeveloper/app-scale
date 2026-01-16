@@ -1,13 +1,15 @@
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Users, Plus, User } from 'lucide-react-native';
+import { ArrowLeft, Users, Plus, User, Folder, Briefcase } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
 export default function DepartmentDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [department, setDepartment] = useState<any>(null);
+  const [parentDepartment, setParentDepartment] = useState<any>(null);
+  const [subDepartments, setSubDepartments] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [functions, setFunctions] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -15,12 +17,66 @@ export default function DepartmentDetailsScreen() {
   const [showModal, setShowModal] = useState(false);
   const [newFunctionName, setNewFunctionName] = useState('');
   const [savingFunction, setSavingFunction] = useState(false);
+  const [showSubDepartmentModal, setShowSubDepartmentModal] = useState(false);
+  const [newSubDepartmentName, setNewSubDepartmentName] = useState('');
+  const [savingSubDepartment, setSavingSubDepartment] = useState(false);
+
+  const fetchFunctions = async (departmentId: string) => {
+    const { data: deptFunctions } = await supabase
+      .from('department_functions')
+      .select('id, name, description')
+      .eq('department_id', departmentId)
+      .order('name');
+
+    if (deptFunctions) {
+      setFunctions(deptFunctions);
+    }
+  };
+
+  const fetchSubDepartments = async (departmentId: string) => {
+    const { data: children } = await supabase
+      .from('departments')
+      .select('id, name, description, parent_id')
+      .eq('parent_id', departmentId)
+      .order('name');
+
+    if (children) {
+      setSubDepartments(children);
+    }
+  };
+
+  const fetchParentDepartment = async (parentId: string) => {
+    const { data: parent } = await supabase
+      .from('departments')
+      .select('id, name')
+      .eq('id', parentId)
+      .single();
+
+    if (parent) {
+      setParentDepartment(parent);
+    }
+  };
 
   // Verificar se é admin e carregar dados
   useEffect(() => {
     async function loadData() {
+      setLoading(true);
+      setDepartment(null);
+      setParentDepartment(null);
+      setSubDepartments([]);
+      setMembers([]);
+      setFunctions([]);
+
+      if (!id) {
+        setLoading(false);
+        return;
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !id) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
       // Verificar se é admin
       const { data: profile } = await supabase
@@ -36,12 +92,18 @@ export default function DepartmentDetailsScreen() {
       // Buscar detalhes do departamento
       const { data: dept } = await supabase
         .from('departments')
-        .select('id, name, description, priority_order, availability_deadline_day')
+        .select('id, name, description, priority_order, availability_deadline_day, parent_id, organization_id')
         .eq('id', id)
         .single();
 
       if (dept) {
         setDepartment(dept);
+
+        if (dept.parent_id) {
+          await fetchParentDepartment(dept.parent_id);
+        } else {
+          setParentDepartment(null);
+        }
       }
 
       // Buscar membros do departamento
@@ -58,16 +120,8 @@ export default function DepartmentDetailsScreen() {
         setMembers(deptMembers);
       }
 
-      // Buscar funções do departamento
-      const { data: deptFunctions } = await supabase
-        .from('department_functions')
-        .select('id, name, description')
-        .eq('department_id', id)
-        .order('name');
-
-      if (deptFunctions) {
-        setFunctions(deptFunctions);
-      }
+      await fetchSubDepartments(String(id));
+      await fetchFunctions(String(id));
 
       setLoading(false);
     }
@@ -98,20 +152,49 @@ export default function DepartmentDetailsScreen() {
         setNewFunctionName('');
 
         // Recarregar funções
-        const { data: deptFunctions } = await supabase
-          .from('department_functions')
-          .select('id, name, description')
-          .eq('department_id', id)
-          .order('name');
-
-        if (deptFunctions) {
-          setFunctions(deptFunctions);
-        }
+        await fetchFunctions(String(id));
       }
     } catch (error: any) {
       Alert.alert('Erro', error.message || 'Ocorreu um erro inesperado');
     } finally {
       setSavingFunction(false);
+    }
+  };
+
+  const handleCreateSubDepartment = async () => {
+    if (!newSubDepartmentName.trim() || !id) {
+      Alert.alert('Erro', 'Por favor, preencha o nome do sub-departamento');
+      return;
+    }
+
+    if (!department?.organization_id) {
+      Alert.alert('Erro', 'Não foi possível identificar a organização do departamento atual');
+      return;
+    }
+
+    setSavingSubDepartment(true);
+    try {
+      const { error } = await supabase
+        .from('departments')
+        .insert({
+          name: newSubDepartmentName.trim(),
+          parent_id: String(id),
+          organization_id: department.organization_id,
+          priority_order: 99,
+        });
+
+      if (error) {
+        Alert.alert('Erro ao criar sub-departamento', error.message);
+      } else {
+        Alert.alert('Sucesso!', 'Sub-departamento criado com sucesso.');
+        setShowSubDepartmentModal(false);
+        setNewSubDepartmentName('');
+        await fetchSubDepartments(String(id));
+      }
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Ocorreu um erro inesperado');
+    } finally {
+      setSavingSubDepartment(false);
     }
   };
 
@@ -143,7 +226,9 @@ export default function DepartmentDetailsScreen() {
         {/* Header */}
         <View className="bg-white border-b border-gray-200 px-4 py-3 flex-row items-center">
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => {
+             router.push('/(tabs)/departments');
+            }}
             className="mr-4"
           >
             <ArrowLeft size={24} color="#374151" />
@@ -153,10 +238,82 @@ export default function DepartmentDetailsScreen() {
             {department.description && (
               <Text className="text-gray-600 text-sm mt-1">{department.description}</Text>
             )}
+            {department.parent_id && parentDepartment?.name && (
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: '/departments/[id]',
+                    params: { id: String(parentDepartment.id) },
+                  })
+                }
+                className="mt-2"
+              >
+                <Text className="text-blue-600 text-sm font-semibold">Voltar para {parentDepartment.name}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
         <View className="p-4">
+          {/* Sub-departamentos */}
+          <View className="mb-6">
+            <View className="flex-row items-center justify-between mb-4">
+              <View className="flex-row items-center">
+                <Folder size={20} color="#4f46e5" style={{ marginRight: 8 }} />
+                <Text className="text-lg font-semibold text-gray-900">Sub-departamentos</Text>
+              </View>
+              {isAdmin && (
+                <TouchableOpacity
+                  onPress={() => setShowSubDepartmentModal(true)}
+                  className="bg-indigo-600 rounded-lg px-3 py-1.5 flex-row items-center"
+                >
+                  <Plus size={16} color="white" style={{ marginRight: 4 }} />
+                  <Text className="text-white font-semibold text-xs">Criar</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {subDepartments.length > 0 ? (
+              <View>
+                {subDepartments.map((child, index) => (
+                  <TouchableOpacity
+                    key={child.id}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/departments/[id]',
+                        params: { id: String(child.id) },
+                      })
+                    }
+                    className={`bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex-row items-center ${index !== subDepartments.length - 1 ? 'mb-3' : ''}`}
+                  >
+                    <View className="w-10 h-10 rounded-full bg-indigo-100 items-center justify-center mr-3">
+                      <Folder size={20} color="#4f46e5" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-gray-900 font-semibold">{child.name}</Text>
+                      {child.description && (
+                        <Text className="text-indigo-700 text-sm mt-1">{child.description}</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <View className="bg-white rounded-xl p-6 items-center border border-gray-200">
+                <Folder size={32} color="#9ca3af" />
+                <Text className="text-gray-500 mt-2">Nenhum sub-departamento encontrado</Text>
+                {isAdmin && (
+                  <TouchableOpacity
+                    onPress={() => setShowSubDepartmentModal(true)}
+                    className="mt-4 bg-indigo-600 rounded-lg px-4 py-2"
+                  >
+                    <Text className="text-white font-semibold text-sm">Criar sub-departamento</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+
           {/* Membros do Departamento */}
           <View className="mb-6">
             <View className="flex-row items-center justify-between mb-4">
@@ -206,12 +363,12 @@ export default function DepartmentDetailsScreen() {
             )}
           </View>
 
-          {/* Funções / Sub-departamentos */}
+          {/* Funções */}
           <View className="mb-6">
             <View className="flex-row items-center justify-between mb-4">
               <View className="flex-row items-center">
-                <Plus size={20} color="#3b82f6" style={{ marginRight: 8 }} />
-                <Text className="text-lg font-semibold text-gray-900">Funções / Sub-departamentos</Text>
+                <Briefcase size={20} color="#3b82f6" style={{ marginRight: 8 }} />
+                <Text className="text-lg font-semibold text-gray-900">Funções</Text>
               </View>
               {isAdmin && (
                 <TouchableOpacity
@@ -240,7 +397,7 @@ export default function DepartmentDetailsScreen() {
               </View>
             ) : (
               <View className="bg-white rounded-xl p-6 items-center border border-gray-200">
-                <Plus size={32} color="#9ca3af" />
+                <Briefcase size={32} color="#9ca3af" />
                 <Text className="text-gray-500 mt-2">Nenhuma função cadastrada</Text>
                 {isAdmin && (
                   <TouchableOpacity
@@ -255,6 +412,67 @@ export default function DepartmentDetailsScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Modal para criar novo sub-departamento */}
+      <Modal
+        visible={showSubDepartmentModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSubDepartmentModal(false)}
+      >
+        <View className="flex-1 bg-black/50 justify-end">
+          <View className="bg-white rounded-t-3xl p-6">
+            <View className="flex-row items-center justify-between mb-4">
+              <Text className="text-xl font-bold text-gray-900">Novo Sub-departamento</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowSubDepartmentModal(false);
+                  setNewSubDepartmentName('');
+                }}
+              >
+                <Text className="text-gray-500 text-lg">✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-sm font-medium text-gray-700 mb-2">
+                Nome do Sub-departamento
+              </Text>
+              <TextInput
+                className="bg-gray-50 rounded-lg border border-gray-200 px-4 py-3 text-gray-900 text-base"
+                placeholder="Ex: Louvor, Infantil, Administrativo..."
+                placeholderTextColor="#9ca3af"
+                value={newSubDepartmentName}
+                onChangeText={setNewSubDepartmentName}
+                editable={!savingSubDepartment}
+              />
+            </View>
+
+            <TouchableOpacity
+              onPress={handleCreateSubDepartment}
+              disabled={savingSubDepartment || !newSubDepartmentName.trim()}
+              className="bg-indigo-600 rounded-lg py-4 px-6 mb-3"
+              style={{ opacity: savingSubDepartment || !newSubDepartmentName.trim() ? 0.5 : 1 }}
+            >
+              {savingSubDepartment ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-white font-semibold text-center">Criar Sub-departamento</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                setShowSubDepartmentModal(false);
+                setNewSubDepartmentName('');
+              }}
+              className="bg-gray-100 rounded-lg py-4 px-6"
+            >
+              <Text className="text-gray-700 font-semibold text-center">Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal para criar nova função */}
       <Modal
