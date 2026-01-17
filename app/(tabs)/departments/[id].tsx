@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Users, Plus, User, Folder, Briefcase } from 'lucide-react-native';
+import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
 export default function DepartmentDetailsScreen() {
@@ -13,6 +13,7 @@ export default function DepartmentDetailsScreen() {
   const [members, setMembers] = useState<any[]>([]);
   const [functions, setFunctions] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isMaster, setIsMaster] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [newFunctionName, setNewFunctionName] = useState('');
@@ -20,6 +21,7 @@ export default function DepartmentDetailsScreen() {
   const [showSubDepartmentModal, setShowSubDepartmentModal] = useState(false);
   const [newSubDepartmentName, setNewSubDepartmentName] = useState('');
   const [savingSubDepartment, setSavingSubDepartment] = useState(false);
+  const [deletingDepartment, setDeletingDepartment] = useState(false);
 
   const fetchFunctions = async (departmentId: string) => {
     const { data: deptFunctions } = await supabase
@@ -66,6 +68,8 @@ export default function DepartmentDetailsScreen() {
       setSubDepartments([]);
       setMembers([]);
       setFunctions([]);
+      setIsAdmin(false);
+      setIsMaster(false);
 
       if (!id) {
         setLoading(false);
@@ -86,7 +90,10 @@ export default function DepartmentDetailsScreen() {
         .single();
 
       if (profile) {
-        setIsAdmin(profile.org_role === 'admin');
+        const masterStatus = profile.org_role === 'master';
+        const adminStatus = profile.org_role === 'admin' || profile.org_role === 'master';
+        setIsMaster(masterStatus);
+        setIsAdmin(adminStatus);
       }
 
       // Buscar detalhes do departamento
@@ -198,6 +205,47 @@ export default function DepartmentDetailsScreen() {
     }
   };
 
+  const handleDeleteDepartment = () => {
+    if (!id) return;
+
+    Alert.alert(
+      'Apagar departamento',
+      'Tem certeza que deseja apagar este departamento? Esta ação não pode ser desfeita.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Apagar',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingDepartment(true);
+            try {
+              const { error } = await supabase
+                .from('departments')
+                .delete()
+                .eq('id', String(id));
+
+              if (error) {
+                Alert.alert('Erro ao apagar departamento', error.message);
+                return;
+              }
+
+              Alert.alert('Sucesso!', 'Departamento apagado com sucesso.');
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.push('/(tabs)/departments');
+              }
+            } catch (error: any) {
+              Alert.alert('Erro', error.message || 'Ocorreu um erro inesperado');
+            } finally {
+              setDeletingDepartment(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <View className="flex-1 bg-gray-50 items-center justify-center">
@@ -227,7 +275,11 @@ export default function DepartmentDetailsScreen() {
         <View className="bg-white border-b border-gray-200 px-4 py-3 flex-row items-center">
           <TouchableOpacity
             onPress={() => {
-             router.push('/(tabs)/departments');
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.push('/(tabs)/departments');
+              }
             }}
             className="mr-4"
           >
