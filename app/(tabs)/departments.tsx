@@ -79,6 +79,7 @@ export default function DepartmentsScreen() {
           .from('departments')
           .select('id, name, description')
           .eq('organization_id', profile.organization_id)
+          .is('parent_id', null)
           .order('priority_order', { ascending: false });
 
         if (depts) {
