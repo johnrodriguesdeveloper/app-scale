@@ -352,7 +352,7 @@ export default function MemberListScreen() {
         animationType="slide"
         onRequestClose={() => setShowModal(false)}
       >
-        <View className="flex-1 bg-black/50 justify-end">
+        <View className="flex-1 bg-black/50 justify-end ">
           <View className="bg-white rounded-t-3xl p-6 max-h-[80%]">
             <View className="flex-row items-center justify-between mb-6">
               <Text className="text-xl font-bold text-gray-900">
@@ -379,7 +379,7 @@ export default function MemberListScreen() {
                   placeholderTextColor="#9ca3af"
                 />
                 
-                <View className="bg-gray-50 rounded-xl p-3 max-h-32">
+                <View className="bg-gray-50 rounded-xl p-3 max-h-64">
                   <FlatList
                     data={availableProfiles.filter(profile => 
                       profile.full_name.toLowerCase().includes(searchText.toLowerCase())
@@ -409,9 +409,11 @@ export default function MemberListScreen() {
                 </View>
               </View>
             )}
-
+           
             {/* Campo de Função */}
-            <View className="mb-6">
+           {
+            availableFunctions.length > 0 && (
+               <View className="mb-6">
               <Text className="text-gray-700 font-medium mb-2">Função</Text>
               <View className="bg-gray-50 rounded-xl p-3 max-h-32">
                 <FlatList
@@ -435,6 +437,8 @@ export default function MemberListScreen() {
                 />
               </View>
             </View>
+            )
+           }
 
             {/* Botões de ação */}
             <View className="flex-row gap-3">
