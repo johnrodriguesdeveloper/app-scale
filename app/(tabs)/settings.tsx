@@ -69,7 +69,11 @@ export default function SettingsScreen() {
               <View>
                 <Text className="text-sm text-gray-500">Função</Text>
                 <Text className="text-gray-900 font-medium">
-                  {profile.org_role === 'admin' ? 'Administrador' : 'Membro'}
+                  {profile.org_role === 'master'
+                    ? 'Master'
+                    : profile.org_role === 'admin'
+                      ? 'Administrador'
+                      : 'Membro'}
                 </Text>
               </View>
             </>

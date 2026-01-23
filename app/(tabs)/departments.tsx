@@ -1,7 +1,7 @@
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
-import { Users, Plus } from 'lucide-react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useState, useCallback } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Users, Plus, Trash } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
 export default function DepartmentsScreen() {
@@ -10,13 +10,51 @@ export default function DepartmentsScreen() {
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [isLeader, setIsLeader] = useState<Record<string, boolean>>({});
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isMaster, setIsMaster] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadUserData() {
+  const handleDeleteDepartment = (departmentId: string, departmentName: string) => {
+    if (!departmentId) return;
+
+    Alert.alert(
+      'Excluir Departamento',
+      `Tem certeza que deseja excluir o departamento '${departmentName}'? Essa ação não pode ser desfeita e apagará todos os sub-departamentos e escalas vinculados.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase
+              .from('departments')
+              .delete()
+              .eq('id', departmentId);
+
+            if (error) {
+              Alert.alert(
+                'Não foi possível excluir',
+                'Verifique se há membros ou escalas ativas vinculadas a este departamento.'
+              );
+              return;
+            }
+
+            // Atualização instantânea para feedback visual
+            setDepartments((prev) => prev.filter((d) => d.id !== departmentId));
+            
+            // Recarregar dados do servidor para garantir sincronia
+            await fetchDepartments();
+          },
+        },
+      ]
+    );
+  };
+
+  const fetchDepartments = useCallback(async () => {
+    setLoading(true);
+    try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      console.log('🔍 Debug - User:', user);
 
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -31,15 +69,17 @@ export default function DepartmentsScreen() {
 
       if (profile) {
         setOrganizationId(profile.organization_id);
-        const adminStatus = profile.org_role === 'admin';
+        const masterStatus = profile.org_role === 'master';
+        const adminStatus = profile.org_role === 'admin' || profile.org_role === 'master';
+        setIsMaster(masterStatus);
         setIsAdmin(adminStatus);
-        console.log('🔍 Debug - User role:', profile.org_role, '| isAdmin:', adminStatus, '| Full profile:', profile);
 
         // Buscar departamentos
         const { data: depts } = await supabase
           .from('departments')
           .select('id, name, description')
           .eq('organization_id', profile.organization_id)
+          .is('parent_id', null)
           .order('priority_order', { ascending: false });
 
         if (depts) {
@@ -61,17 +101,25 @@ export default function DepartmentsScreen() {
           }
         }
       }
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
     }
-
-    loadUserData();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchDepartments();
+    }, [fetchDepartments])
+  );
 
   return (
     <ScrollView className="flex-1 bg-gray-50">
       <View className="p-4">
         <View className="flex-row items-center justify-between mb-4">
           <Text className="text-2xl font-bold text-gray-900">Departamentos</Text>
-          {isAdmin && (
+          {isMaster && (
             <TouchableOpacity
               onPress={() => router.push('/create-department')}
               className="bg-blue-600 rounded-lg px-4 py-2.5 flex-row items-center shadow-sm"
@@ -82,33 +130,55 @@ export default function DepartmentsScreen() {
           )}
         </View>
 
-        {departments.map((dept) => (
-          <TouchableOpacity
-            key={dept.id}
-            onPress={() => router.push(`/(tabs)/departments/${dept.id}`)}
-            className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-200"
-          >
-            <View>
-              <Text className="text-lg font-semibold text-gray-900">
-                {dept.name}
-              </Text>
-              {dept.description && (
-                <Text className="text-gray-600 text-sm mt-1">{dept.description}</Text>
-              )}
-              {isLeader[dept.id] && (
-                <View className="flex-row items-center mt-2">
-                  <Users size={16} color="#3b82f6" />
-                  <Text className="text-blue-600 text-sm ml-1">Você é líder</Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
-        ))}
-
-        {departments.length === 0 && (
+        {loading ? (
           <View className="items-center py-8">
-            <Text className="text-gray-500">Nenhum departamento encontrado</Text>
+            <ActivityIndicator size="large" color="#3b82f6" />
+            <Text className="text-gray-500 mt-2">Carregando...</Text>
           </View>
+        ) : (
+          <>
+            {departments.map((dept) => (
+              <View
+                key={dept.id}
+                className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-200 flex-row items-center justify-between"
+              >
+                <TouchableOpacity
+                  onPress={() => router.push(`/(tabs)/departments/${dept.id}`)}
+                  className="flex-1 pr-3"
+                >
+                  <View>
+                    <Text className="text-lg font-semibold text-gray-900">
+                      {dept.name}
+                    </Text>
+                    {dept.description && (
+                      <Text className="text-gray-600 text-sm mt-1">{dept.description}</Text>
+                    )}
+                    {isLeader[dept.id] && (
+                      <View className="flex-row items-center mt-2">
+                        <Users size={16} color="#3b82f6" />
+                        <Text className="text-blue-600 text-sm ml-1">Você é líder</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                {isMaster && (
+                  <TouchableOpacity
+                    onPress={() => handleDeleteDepartment(String(dept.id), String(dept.name))}
+                    className="p-2"
+                  >
+                    <Trash size={20} color="#ef4444" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+
+            {departments.length === 0 && (
+              <View className="items-center py-8">
+                <Text className="text-gray-500">Nenhum departamento encontrado</Text>
+              </View>
+            )}
+          </>
         )}
       </View>
     </ScrollView>

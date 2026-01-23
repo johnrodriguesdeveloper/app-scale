@@ -11,7 +11,7 @@ export default function CreateDepartmentScreen() {
   const [deadlineDay, setDeadlineDay] = useState('');
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isMaster, setIsMaster] = useState(false);
 
   // Buscar organization_id e verificar se é admin
   useEffect(() => {
@@ -27,7 +27,7 @@ export default function CreateDepartmentScreen() {
 
       if (profile) {
         setOrganizationId(profile.organization_id);
-        setIsAdmin(profile.org_role === 'admin');
+        setIsMaster(profile.org_role === 'master');
       }
     }
 
@@ -58,8 +58,8 @@ export default function CreateDepartmentScreen() {
       return;
     }
 
-    if (!isAdmin) {
-      Alert.alert('Erro', 'Apenas administradores podem criar departamentos');
+    if (!isMaster) {
+      Alert.alert('Erro', 'Apenas usuários master podem criar departamentos');
       return;
     }
 
