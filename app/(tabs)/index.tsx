@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Calendar, AlertCircle } from 'lucide-react-native';
+import { Calendar, AlertCircle, Clock } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { getUpcomingRosters } from '@/services/rosterService';
 import { useDeadlineCheck } from '@/hooks/useDeadlineCheck';
@@ -163,6 +163,22 @@ export default function DashboardScreen() {
             ))}
           </View>
         )}
+
+        {/* Botão Minha Disponibilidade */}
+        <TouchableOpacity
+          onPress={() => router.push('/availability/routine')}
+          className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-4 mb-4 shadow-md border border-blue-200"
+        >
+          <View className="flex-row items-center justify-center">
+            <Clock size={20} color="white" className="mr-2" />
+            <Text className="text-white font-semibold text-lg">
+              Minha Disponibilidade
+            </Text>
+          </View>
+          <Text className="text-blue-100 text-center text-sm mt-2">
+            Defina seus dias disponíveis para escalas
+          </Text>
+        </TouchableOpacity>
 
         {loading && (
           <View className="items-center py-8">
