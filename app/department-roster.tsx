@@ -1,5 +1,5 @@
 import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, ChevronLeft, ChevronRight, User, Plus, Trash2, X, Filter } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +11,9 @@ export default function DepartmentRosterScreen() {
   const params = useLocalSearchParams();
   const departmentId = String(params.departmentId);
   const departmentName = String(params.departmentName || 'Escala');
+  
+  // Referência para controlar o Scroll Horizontal
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // Estados
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -37,6 +40,37 @@ export default function DepartmentRosterScreen() {
       fetchRosterForDate(selectedDate);
     }
   }, [selectedDate]);
+
+  // --- NOVA LÓGICA DE SCROLL AUTOMÁTICO ---
+  const getDaysInMonth = () => {
+    const start = startOfMonth(currentDate);
+    const end = endOfMonth(currentDate);
+    const days = eachDayOfInterval({ start, end });
+    return days.filter(day => serviceDays.includes(getDay(day)));
+  };
+
+  const daysToShow = getDaysInMonth();
+
+  useEffect(() => {
+    // Esse efeito roda quando mudamos de mês ou carregamos a tela
+    if (daysToShow.length > 0 && scrollViewRef.current) {
+      // 1. Descobrir qual o índice do dia selecionado na lista
+      const index = daysToShow.findIndex(day => isSameDay(day, selectedDate));
+      
+      if (index !== -1) {
+        // 2. Calcular a posição (Cada item tem w-14 (56px) + mr-3 (12px) = ~68px)
+        const ITEM_SIZE = 68; 
+        const offset = index * ITEM_SIZE;
+
+        // 3. Rolar (com um pequeno delay para garantir que a UI desenhou)
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({ x: offset, animated: true });
+        }, 100);
+      }
+    }
+  }, [currentDate, serviceDays]); // Dependências: quando muda o mês ou os dias carregam
+
+  // --- FIM DA LÓGICA DE SCROLL ---
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -65,7 +99,6 @@ export default function DepartmentRosterScreen() {
   };
 
   const fetchMembers = async () => {
-    // ATUALIZAÇÃO: Buscando function_id e o nome da função do membro
     const { data, error } = await supabase
       .from('department_members')
       .select(`
@@ -100,15 +133,6 @@ export default function DepartmentRosterScreen() {
     if (data) setRosterEntries(data);
   };
 
-  const getDaysInMonth = () => {
-    const start = startOfMonth(currentDate);
-    const end = endOfMonth(currentDate);
-    const days = eachDayOfInterval({ start, end });
-    return days.filter(day => serviceDays.includes(getDay(day)));
-  };
-
-  const daysToShow = getDaysInMonth();
-
   const handleAddMember = async (memberId: string) => {
     if (!selectedFunctionId) return;
 
@@ -134,11 +158,9 @@ export default function DepartmentRosterScreen() {
     fetchRosterForDate(selectedDate);
   };
 
-  // --- FILTRO INTELIGENTE ---
-  // Filtra os membros baseados na função selecionada
+  // Filtro Inteligente
   const filteredMembers = members.filter(member => {
     if (!selectedFunctionId) return true;
-    // Retorna quem tem a função EXATA ou quem não tem função definida (opcional, tire o || !member.function_id se quiser ser estrito)
     return member.function_id === selectedFunctionId;
   });
 
@@ -211,7 +233,12 @@ export default function DepartmentRosterScreen() {
 
       {/* Scroll de Dias */}
       <View className="bg-white pb-4">
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pl-4">
+        <ScrollView 
+          ref={scrollViewRef} // <--- REFERÊNCIA AQUI
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          className="pl-4"
+        >
           {daysToShow.map((day, index) => {
             const isSelected = isSameDay(day, selectedDate);
             return (
@@ -254,7 +281,7 @@ export default function DepartmentRosterScreen() {
         <View className="h-10" />
       </ScrollView>
 
-      {/* --- BOTTOM SHEET (Seletor Filtrado) --- */}
+      {/* Bottom Sheet */}
       <Modal
         visible={showMemberSelect}
         transparent
@@ -275,7 +302,7 @@ export default function DepartmentRosterScreen() {
             </View>
 
             <FlatList 
-              data={filteredMembers} // <--- AQUI ESTÁ A MÁGICA
+              data={filteredMembers}
               keyExtractor={item => item.id}
               contentContainerStyle={{ padding: 16 }}
               ListEmptyComponent={
@@ -301,7 +328,6 @@ export default function DepartmentRosterScreen() {
                     <Text className="text-gray-900 font-semibold text-base">
                       {item.profiles?.full_name || 'Sem nome'}
                     </Text>
-                    {/* Mostra qual função a pessoa exerce */}
                     <Text className="text-gray-500 text-xs">
                       {item.department_functions?.name || 'Sem função'}
                     </Text>
