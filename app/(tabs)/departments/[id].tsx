@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash, Calendar, Shield } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import DepartmentLeadersManager from '../../../components/DepartmentLeadersManager';
 
 
 export default function DepartmentDetailsScreen() {
@@ -16,6 +15,7 @@ export default function DepartmentDetailsScreen() {
   const [functions, setFunctions] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMaster, setIsMaster] = useState(false);
+  const [isLeader, setIsLeader] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [newFunctionName, setNewFunctionName] = useState('');
@@ -25,7 +25,6 @@ export default function DepartmentDetailsScreen() {
   const [savingSubDepartment, setSavingSubDepartment] = useState(false);
   const [deletingDepartment, setDeletingDepartment] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
-  const [showLeadersModal, setShowLeadersModal] = useState(false);
 
   const fetchFunctions = async (departmentId: string) => {
     const { data: deptFunctions } = await supabase
@@ -65,6 +64,8 @@ export default function DepartmentDetailsScreen() {
 
   // Verificar se é admin e carregar dados
   useEffect(() => {
+    console.log('Iniciando carga para ID:', id);
+    
     async function loadData() {
       setLoading(true);
       setDepartment(null);
@@ -74,14 +75,17 @@ export default function DepartmentDetailsScreen() {
       setFunctions([]);
       setIsAdmin(false);
       setIsMaster(false);
+      setIsLeader(false);
 
       if (!id) {
+        console.log('ID não fornecido, retornando...');
         setLoading(false);
         return;
       }
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
+        console.log('Usuário não autenticado, retornando...');
         setLoading(false);
         return;
       }
@@ -100,12 +104,29 @@ export default function DepartmentDetailsScreen() {
         setIsAdmin(adminStatus);
       }
 
+      // Verificar se é líder deste departamento específico
+      const { data: leaderCheck } = await supabase
+        .from('department_leaders')
+        .select('id')
+        .eq('department_id', id)
+        .eq('user_id', user.id)
+        .single();
+      
+      if (leaderCheck) setIsLeader(true);
+
       // Buscar detalhes do departamento
-      const { data: dept } = await supabase
+      const { data: dept, error } = await supabase
         .from('departments')
         .select('id, name, description, priority_order, availability_deadline_day, parent_id, organization_id')
         .eq('id', id)
         .single();
+
+      if (error) {
+        console.error('ERRO AO BUSCAR DEPARTAMENTO:', error);
+        console.log('ID Recebido:', id);
+      } else {
+        console.log('Departamento encontrado:', dept);
+      }
 
       if (dept) {
         setDepartment(dept);
@@ -414,19 +435,26 @@ export default function DepartmentDetailsScreen() {
           <View className="flex-row gap-2">
             {(isAdmin || isMaster) && (
               <TouchableOpacity
-               onPress={() => setShowLeadersModal(true)}
+                onPress={() => router.push({
+                  pathname: '/department-leaders', // Nova rota na raiz
+                  params: { 
+                    departmentId: String(id),
+                    departmentName: department?.name || 'Departamento'
+                  }
+                })}
                 className="bg-amber-600 rounded-lg px-3 py-2 flex-row items-center"
               >
                 <Shield size={16} color="white" style={{ marginRight: 4 }} />
                 <Text className="text-white font-semibold text-sm">Liderança</Text>
               </TouchableOpacity>
             )}
+            {(isAdmin || isMaster || isLeader) && (
             <TouchableOpacity
               onPress={() => router.push({
-                pathname: '/departments/roster',
-                params: {
+                pathname: '/department-roster',
+                params: { 
                   departmentId: String(id),
-                  departmentName: department.name
+                  departmentName: department.name 
                 }
               })}
               className="bg-blue-600 rounded-lg px-3 py-2 flex-row items-center"
@@ -434,6 +462,7 @@ export default function DepartmentDetailsScreen() {
               <Calendar size={16} color="white" style={{ marginRight: 4 }} />
               <Text className="text-white font-semibold text-sm">Gerenciar Escala</Text>
             </TouchableOpacity>
+          )}
           </View>
         </View>
 
@@ -823,13 +852,6 @@ export default function DepartmentDetailsScreen() {
           </View>
         </View>
       </Modal>
-      
-      {/* Modal de Gestão de Líderes */}
-      <DepartmentLeadersManager
-        departmentId={String(id)}
-        visible={showLeadersModal}
-        onClose={() => setShowLeadersModal(false)}
-      />
     </>
   );
 }

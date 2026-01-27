@@ -183,3 +183,13 @@ const members = await getAvailableMembersByFunction(
 ## 📄 Licença
 
 Este projeto é privado e proprietário.
+
+
+TODO 
+
+- [ ] Membro só preenche disponibilidade da escala para proximo mês 
+- [ ] Não aparece domingo EBD no calendario
+- [ ] Botões de voltar indo para tela inicial
+- [ ] Melhorar UI/UX (Header, cores, etc)
+- [ ] Mais de uma função por membro
+- [ ] Equipes do Departamento infantil
