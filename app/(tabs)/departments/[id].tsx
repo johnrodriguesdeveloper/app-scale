@@ -1,8 +1,10 @@
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash } from 'lucide-react-native';
+import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash, Calendar, Shield } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import DepartmentLeadersManager from '../../../components/DepartmentLeadersManager';
+
 
 export default function DepartmentDetailsScreen() {
   const router = useRouter();
@@ -23,6 +25,7 @@ export default function DepartmentDetailsScreen() {
   const [savingSubDepartment, setSavingSubDepartment] = useState(false);
   const [deletingDepartment, setDeletingDepartment] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showLeadersModal, setShowLeadersModal] = useState(false);
 
   const fetchFunctions = async (departmentId: string) => {
     const { data: deptFunctions } = await supabase
@@ -397,15 +400,40 @@ export default function DepartmentDetailsScreen() {
               <TouchableOpacity
                 onPress={() =>
                   router.push({
-                    pathname: '/departments/[id]',
-                    params: { id: String(parentDepartment.id) },
+                    pathname: '/(tabs)/departments/[id]',
+                    params: { id: parentDepartment.id }
                   })
                 }
-                className="mt-2"
+                className="flex-row items-center mt-1"
               >
-                <Text className="text-blue-600 text-sm font-semibold">Voltar para {parentDepartment.name}</Text>
+                <Text className="text-gray-500 text-sm">{parentDepartment.name}</Text>
               </TouchableOpacity>
             )}
+          </View>
+          {/* Botões de ação */}
+          <View className="flex-row gap-2">
+            {(isAdmin || isMaster) && (
+              <TouchableOpacity
+               onPress={() => setShowLeadersModal(true)}
+                className="bg-amber-600 rounded-lg px-3 py-2 flex-row items-center"
+              >
+                <Shield size={16} color="white" style={{ marginRight: 4 }} />
+                <Text className="text-white font-semibold text-sm">Liderança</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => router.push({
+                pathname: '/departments/roster',
+                params: {
+                  departmentId: String(id),
+                  departmentName: department.name
+                }
+              })}
+              className="bg-blue-600 rounded-lg px-3 py-2 flex-row items-center"
+            >
+              <Calendar size={16} color="white" style={{ marginRight: 4 }} />
+              <Text className="text-white font-semibold text-sm">Gerenciar Escala</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -795,6 +823,13 @@ export default function DepartmentDetailsScreen() {
           </View>
         </View>
       </Modal>
+      
+      {/* Modal de Gestão de Líderes */}
+      <DepartmentLeadersManager
+        departmentId={String(id)}
+        visible={showLeadersModal}
+        onClose={() => setShowLeadersModal(false)}
+      />
     </>
   );
 }
