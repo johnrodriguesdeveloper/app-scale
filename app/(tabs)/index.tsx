@@ -1,14 +1,24 @@
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Calendar, AlertCircle, Clock } from 'lucide-react-native';
+import { Calendar, AlertCircle, Clock, CalendarDays } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { getUpcomingRosters } from '@/services/rosterService';
 import { useDeadlineCheck } from '@/hooks/useDeadlineCheck';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+interface NextRoster {
+  id: string;
+  schedule_date: string;
+  function_name: string;
+  department_name: string;
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
   const [upcomingRosters, setUpcomingRosters] = useState<any[]>([]);
+  const [nextRoster, setNextRoster] = useState<NextRoster | null>(null);
   const [loading, setLoading] = useState(true);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [departmentId, setDepartmentId] = useState<string | null>(null);
@@ -45,6 +55,64 @@ export default function DashboardScreen() {
     loadUserData();
   }, []);
 
+  // Buscar próxima escala do usuário
+  useEffect(() => {
+    async function loadNextRoster() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      try {
+        // Buscar IDs de membro do usuário em todos os departamentos
+        const { data: memberData } = await supabase
+          .from('department_members')
+          .select('id')
+          .eq('user_id', user.id);
+
+        if (!memberData || memberData.length === 0) {
+          setLoading(false);
+          return;
+        }
+
+        const memberIds = memberData.map(m => m.id);
+
+        // Buscar próxima escala
+        const today = new Date().toISOString().split('T')[0];
+        const { data: rosterData } = await supabase
+          .from('rosters')
+          .select(`
+            id,
+            schedule_date,
+            department_functions!inner (
+              name
+            ),
+            departments!inner (
+              name
+            )
+          `)
+          .in('member_id', memberIds)
+          .gte('schedule_date', today)
+          .order('schedule_date', { ascending: true })
+          .limit(1);
+
+        if (rosterData && rosterData.length > 0) {
+          const roster = rosterData[0];
+          setNextRoster({
+            id: roster.id,
+            schedule_date: roster.schedule_date,
+            function_name: (roster.department_functions as any).name,
+            department_name: (roster.departments as any).name
+          });
+        }
+      } catch (error) {
+        console.error('Erro ao carregar próxima escala:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadNextRoster();
+  }, []);
+
   // Verificar deadline
   const deadlineCheck = useDeadlineCheck(departmentId, organizationId);
 
@@ -69,26 +137,34 @@ export default function DashboardScreen() {
     }
   }, [organizationId]);
 
-  const nextRoster = upcomingRosters[0];
-
   return (
     <ScrollView className="flex-1 bg-gray-50">
       <View className="p-4">
-        {/* Card Principal: Próxima Escala */}
-        {nextRoster && (
-          <View className="bg-white rounded-xl p-6 mb-4 shadow-sm border border-gray-200">
-            <Text className="text-sm text-gray-500 mb-2">Sua próxima escala</Text>
-            <Text className="text-2xl font-bold text-gray-900 mb-1">
-              {new Date(nextRoster.date).toLocaleDateString('pt-BR', {
-                day: 'numeric',
-                month: 'short',
-              })}
-            </Text>
-            <Text className="text-lg text-gray-700">
-              {nextRoster.function?.name} ({nextRoster.department?.name})
-            </Text>
+        {/* Card Principal: Sua Próxima Escala */}
+        <View className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 mb-4 shadow-lg">
+          <View className="flex-row items-center mb-3">
+            <CalendarDays size={24} color="black" className="mr-2" />
+            <Text className="text-black text-lg font-semibold">Sua Próxima Escala </Text>
           </View>
-        )}
+          
+          {nextRoster ? (
+            <View>
+              <Text className="text-black text-2xl font-bold mb-2">
+                {format(parseISO(nextRoster.schedule_date), "EEEE, dd 'de' MMM", { locale: ptBR })}
+              </Text>
+              <Text className="text-blue-900 text-lg">
+                {nextRoster.function_name} • {nextRoster.department_name}
+              </Text>
+            </View>
+          ) : (
+            <View className="items-center py-4">
+              <CalendarDays size={32} color="rgba(255,255,255,0.7)" className="mb-2" />
+              <Text className="text-white text-center">
+                Nenhuma escala agendada para os próximos dias.
+              </Text>
+            </View>
+          )}
+        </View>
 
         {/* Widget de Calendário Semanal */}
         <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-200">
@@ -98,7 +174,7 @@ export default function DashboardScreen() {
           <View className="flex-row justify-between">
             {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day, index) => {
               const hasRoster = upcomingRosters.some(
-                (r) => new Date(r.date).getDay() === index
+                (r) => new Date(r.schedule_date).getDay() === index
               );
               return (
                 <View key={day} className="items-center">
@@ -129,16 +205,7 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        {deadlineCheck.isPastDeadline && (
-          <View className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
-            <View className="flex-row items-center">
-              <AlertCircle size={20} color="#f59e0b" className="mr-2" />
-              <Text className="text-yellow-800 flex-1">
-                O prazo para informar disponibilidade encerrou. Aguarde o próximo mês.
-              </Text>
-            </View>
-          </View>
-        )}
+        
 
         {/* Lista de Próximas Escalas */}
         {upcomingRosters.length > 0 && (
@@ -153,10 +220,10 @@ export default function DashboardScreen() {
               >
                 <View className="flex-1">
                   <Text className="text-gray-900 font-medium">
-                    {new Date(roster.date).toLocaleDateString('pt-BR')}
+                    {new Date(roster.schedule_date).toLocaleDateString('pt-BR')}
                   </Text>
                   <Text className="text-gray-600 text-sm">
-                    {roster.function?.name} - {roster.department?.name}
+                    {(roster as any).function?.name} - {(roster as any).department?.name}
                   </Text>
                 </View>
               </View>
