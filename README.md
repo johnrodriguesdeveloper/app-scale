@@ -187,10 +187,11 @@ Este projeto é privado e proprietário.
 
 TODO 
 
-- [ ] Membro só preenche disponibilidade da escala para proximo mês 
+- [ X ] Membro só preenche disponibilidade da escala para proximo mês 
+- [ ] Mais de uma função por membro
 - [ ] Não aparece domingo EBD no calendario
-- [ ] Fazer um Header melhor
 - [ ] Botões de voltar indo para tela inicial
 - [ ] Melhorar UI/UX (Header, cores, etc)
-- [ ] Mais de uma função por membro
 - [ ] Equipes do Departamento infantil
+- [ ] Fazer um Header melhor
+- [ ] Config README

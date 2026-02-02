@@ -1,258 +1,112 @@
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Calendar, AlertCircle, Clock, CalendarDays } from 'lucide-react-native';
+import { Calendar, Clock, MapPin } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { getUpcomingRosters } from '@/services/rosterService';
-import { useDeadlineCheck } from '@/hooks/useDeadlineCheck';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 
-interface NextRoster {
-  id: string;
-  schedule_date: string;
-  function_name: string;
-  department_name: string;
-}
-
-export default function DashboardScreen() {
+export default function HomeScreen() {
   const router = useRouter();
-  const [upcomingRosters, setUpcomingRosters] = useState<any[]>([]);
-  const [nextRoster, setNextRoster] = useState<NextRoster | null>(null);
+  const [userName, setUserName] = useState('');
   const [loading, setLoading] = useState(true);
-  const [organizationId, setOrganizationId] = useState<string | null>(null);
-  const [departmentId, setDepartmentId] = useState<string | null>(null);
 
-  // Buscar organização e departamento do usuário
   useEffect(() => {
-    async function loadUserData() {
+    fetchUserData();
+  }, []);
+
+  const fetchUserData = async () => {
+    try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('organization_id')
+        .select('full_name')
         .eq('user_id', user.id)
         .single();
 
       if (profile) {
-        setOrganizationId(profile.organization_id);
-
-        // Buscar primeiro departamento do usuário
-        const { data: deptMember } = await supabase
-          .from('department_members')
-          .select('department_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .single();
-
-        if (deptMember) {
-          setDepartmentId(deptMember.department_id);
-        }
+        setUserName(profile.full_name?.split(' ')[0] || 'Membro');
       }
+    } catch (error) {
+      console.error('Erro ao buscar dados do usuário:', error);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    loadUserData();
-  }, []);
-
-  // Buscar próxima escala do usuário
-  useEffect(() => {
-    async function loadNextRoster() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      try {
-        // Buscar IDs de membro do usuário em todos os departamentos
-        const { data: memberData } = await supabase
-          .from('department_members')
-          .select('id')
-          .eq('user_id', user.id);
-
-        if (!memberData || memberData.length === 0) {
-          setLoading(false);
-          return;
-        }
-
-        const memberIds = memberData.map(m => m.id);
-
-        // Buscar próxima escala
-        const today = new Date().toISOString().split('T')[0];
-        const { data: rosterData } = await supabase
-          .from('rosters')
-          .select(`
-            id,
-            schedule_date,
-            department_functions!inner (
-              name
-            ),
-            departments!inner (
-              name
-            )
-          `)
-          .in('member_id', memberIds)
-          .gte('schedule_date', today)
-          .order('schedule_date', { ascending: true })
-          .limit(1);
-
-        if (rosterData && rosterData.length > 0) {
-          const roster = rosterData[0];
-          setNextRoster({
-            id: roster.id,
-            schedule_date: roster.schedule_date,
-            function_name: (roster.department_functions as any).name,
-            department_name: (roster.departments as any).name
-          });
-        }
-      } catch (error) {
-        console.error('Erro ao carregar próxima escala:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadNextRoster();
-  }, []);
-
-  // Verificar deadline
-  const deadlineCheck = useDeadlineCheck(departmentId, organizationId);
-
-  // Buscar próximas escalas
-  useEffect(() => {
-    async function loadRosters() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !organizationId) return;
-
-      try {
-        const rosters = await getUpcomingRosters(user.id, organizationId, 5);
-        setUpcomingRosters(rosters || []);
-      } catch (error) {
-        console.error('Erro ao carregar escalas:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    if (organizationId) {
-      loadRosters();
-    }
-  }, [organizationId]);
+  if (loading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
+        <Text className="text-gray-500">Carregando...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
-      <View className="p-4">
-        {/* Card Principal: Sua Próxima Escala */}
-        <View className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 mb-4 shadow-lg">
-          <View className="flex-row items-center mb-3">
-            <CalendarDays size={24} color="black" className="mr-2" />
-            <Text className="text-black text-lg font-semibold">Sua Próxima Escala </Text>
-          </View>
-          
-          {nextRoster ? (
-            <View>
-              <Text className="text-black text-2xl font-bold mb-2">
-                {format(parseISO(nextRoster.schedule_date), "EEEE, dd 'de' MMM", { locale: ptBR })}
-              </Text>
-              <Text className="text-blue-900 text-lg">
-                {nextRoster.function_name} • {nextRoster.department_name}
-              </Text>
-            </View>
-          ) : (
-            <View className="items-center py-4">
-              <CalendarDays size={32} color="rgba(255,255,255,0.7)" className="mb-2" />
-              <Text className="text-white text-center">
-                Nenhuma escala agendada para os próximos dias.
-              </Text>
-            </View>
-          )}
+    <SafeAreaView className="flex-1 bg-gray-50">
+      <ScrollView className="flex-1">
+        {/* Header */}
+        <View className="bg-white px-6 py-8 border-b border-gray-200">
+          <Text className="text-gray-600 text-lg">Olá,</Text>
+          <Text className="text-2xl font-bold text-gray-900">{userName} 👋</Text>
         </View>
 
-        {/* Widget de Calendário Semanal */}
-        <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-200">
-          <Text className="text-lg font-semibold text-gray-900 mb-4">
-            Calendário Semanal
-          </Text>
-          <View className="flex-row justify-between">
-            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day, index) => {
-              const hasRoster = upcomingRosters.some(
-                (r) => new Date(r.schedule_date).getDay() === index
-              );
-              return (
-                <View key={day} className="items-center">
-                  <Text className="text-xs text-gray-500 mb-2">{day}</Text>
-                  <View
-                    className={`w-8 h-8 rounded-full ${
-                      hasRoster ? 'bg-blue-500' : 'bg-gray-200'
-                    }`}
-                  />
+        {/* Conteúdo */}
+        <View className="p-6">
+          {/* Cards de Ação Principal */}
+          <View className="space-y-4 mb-8">
+            {/* Card 1: Minha Agenda */}
+            <TouchableOpacity 
+              className="bg-blue-600 rounded-xl p-6 shadow-lg"
+              onPress={() => router.push('/my-scales')}
+            >
+              <View className="flex-row items-center">
+                <View className="w-16 h-16 bg-white/20 rounded-full items-center justify-center mr-4">
+                  <Calendar size={28} color="white" />
                 </View>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Botão de Ação Rápida */}
-        {deadlineCheck.canEdit && (
-          <TouchableOpacity
-            onPress={() => router.push('/availability')}
-            className="bg-blue-500 rounded-xl p-4 mb-4"
-          >
-            <View className="flex-row items-center justify-center">
-              <Calendar size={20} color="white" className="mr-2" />
-              <Text className="text-white font-semibold text-lg">
-                Informar Disponibilidade
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
-
-        
-
-        {/* Lista de Próximas Escalas */}
-        {upcomingRosters.length > 0 && (
-          <View className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-            <Text className="text-lg font-semibold text-gray-900 mb-4">
-              Próximas Escalas
-            </Text>
-            {upcomingRosters.map((roster) => (
-              <View
-                key={roster.id}
-                className="flex-row items-center justify-between py-3 border-b border-gray-100 last:border-b-0"
-              >
                 <View className="flex-1">
-                  <Text className="text-gray-900 font-medium">
-                    {new Date(roster.schedule_date).toLocaleDateString('pt-BR')}
-                  </Text>
-                  <Text className="text-gray-600 text-sm">
-                    {(roster as any).function?.name} - {(roster as any).department?.name}
-                  </Text>
+                  <Text className="text-white font-bold text-xl mb-1">Minha Agenda</Text>
+                  <Text className="text-blue-100">Ver dias que estou escalado</Text>
                 </View>
               </View>
-            ))}
-          </View>
-        )}
+            </TouchableOpacity>
 
-        {/* Botão Minha Disponibilidade */}
-        <TouchableOpacity
-          onPress={() => router.push('/availability/routine')}
-          className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-4 mb-4 shadow-md border border-blue-200"
-        >
-          <View className="flex-row items-center justify-center">
-            <Clock size={20} color="black" className="mr-2" />
-            <Text className="text-black font-semibold text-lg">
-              Minha Disponibilidade
-            </Text>
+            {/* Card 2: Minha Disponibilidade */}
+            <TouchableOpacity 
+              className="bg-orange-500 rounded-xl p-6 shadow-lg"
+              onPress={() => router.push('/availability')}
+            >
+              <View className="flex-row items-center">
+                <View className="w-16 h-16 bg-white/20 rounded-full items-center justify-center mr-4">
+                  <Clock size={28} color="white" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-white font-bold text-xl mb-1">Minha Disponibilidade</Text>
+                  <Text className="text-orange-100">Avisar que não posso ir</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
           </View>
-          <Text className="text-blue-900 text-center text-sm mt-2">
-            Defina seus dias disponíveis para escalas
-          </Text>
-        </TouchableOpacity>
 
-        {loading && (
-          <View className="items-center py-8">
-            <Text className="text-gray-500">Carregando...</Text>
+          {/* Rodapé: Ver Departamentos */}
+          <View className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+            <TouchableOpacity 
+              className="flex-row items-center justify-between p-3"
+              onPress={() => router.push('/(tabs)/departments')}
+            >
+              <View className="flex-row items-center">
+                <View className="w-12 h-12 bg-blue-100 rounded-lg items-center justify-center mr-3">
+                  <MapPin size={20} color="#2563eb" />
+                </View>
+                <View>
+                  <Text className="text-gray-900 font-semibold text-lg">Ver Departamentos</Text>
+                  <Text className="text-gray-500 text-sm">Acesse todos os seus departamentos</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

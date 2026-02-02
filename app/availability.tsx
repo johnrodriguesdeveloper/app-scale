@@ -1,301 +1,337 @@
-import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, AlertCircle } from 'lucide-react-native';
+import { View, Text, Switch, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { 
-  format, 
-  startOfMonth, 
-  endOfMonth, 
-  eachDayOfInterval, 
-  getDay, 
-  addMonths, 
-  subMonths, 
-  isSameMonth, 
-  isSameDay,
-  isBefore,
-  startOfDay,
-  isAfter
-} from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, isBefore } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-export default function AvailabilityScreen() {
-  const [currentMonth, setCurrentMonth] = useState(addMonths(new Date(), 1)); // Próximo mês por padrão
-  const [unavailableDates, setUnavailableDates] = useState<Set<string>>(new Set());
+interface ServiceDay {
+  id: string;
+  day_of_week: number;
+  name: string;
+}
+
+interface AvailabilityRoutine {
+  user_id: string;
+  service_day_id: string;
+  is_available: boolean;
+}
+
+interface AvailabilityException {
+  user_id: string;
+  specific_date: string;
+  is_available: boolean;
+}
+
+const fullDayNames = [
+  'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'
+];
+
+export default function AvailabilityRoutineScreen() {
+  const router = useRouter();
+  
+  // REGRA: Data mínima permitida é o início do próximo mês
+  const minDate = startOfMonth(addMonths(new Date(), 1));
+
+  const [currentDate, setCurrentDate] = useState(minDate);
+  const [serviceDays, setServiceDays] = useState<ServiceDay[]>([]);
+  const [availability, setAvailability] = useState<AvailabilityRoutine[]>([]);
+  const [monthExceptions, setMonthExceptions] = useState<AvailabilityException[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<{ [key: string]: boolean }>({});
 
-  const today = startOfDay(new Date());
-  const nextMonthAllowed = startOfDay(addMonths(today, 1));
+  useEffect(() => {
+    loadData();
+  }, []);
 
-  // Verificar se o mês selecionado é permitido para edição
-  const isMonthAllowed = isAfter(startOfMonth(currentMonth), startOfMonth(today)) || 
-                         isSameMonth(startOfMonth(currentMonth), startOfMonth(nextMonthAllowed));
+  useEffect(() => {
+    loadMonthExceptions();
+  }, [currentDate]);
 
-  // Buscar indisponibilidades do usuário
-  const fetchUnavailability = useCallback(async () => {
+  const handlePrevMonth = () => {
+    const prevMonth = subMonths(currentDate, 1);
+    
+    // Se tentar voltar para antes da data mínima, bloqueia
+    if (isBefore(prevMonth, minDate)) {
+      Alert.alert("Bloqueado", "Você só pode alterar a disponibilidade a partir do próximo mês.");
+      return;
+    }
+    
+    setCurrentDate(prevMonth);
+  };
+
+  const loadData = async () => {
     try {
-      setLoading(true);
+      // Buscar dias de culto
+      const { data: serviceData, error: serviceError } = await supabase
+        .from('service_days')
+        .select('*')
+        .order('day_of_week', { ascending: true });
+
+      if (serviceError) throw serviceError;
+      if (serviceData) setServiceDays(serviceData);
+
+      // Buscar rotina
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const monthStart = format(startOfMonth(currentMonth), 'yyyy-MM-dd');
-      const monthEnd = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
+      const { data: availabilityData, error: availabilityError } = await supabase
+        .from('availability_routine')
+        .select('*')
+        .eq('user_id', user.id);
 
-      const { data, error } = await supabase
-        .from('member_unavailability')
-        .select('unavailable_date')
-        .eq('user_id', user.id)
-        .gte('unavailable_date', monthStart)
-        .lte('unavailable_date', monthEnd);
+      if (availabilityError) throw availabilityError;
+      if (availabilityData) setAvailability(availabilityData);
 
-      if (error) {
-        console.error('Erro ao buscar indisponibilidade:', error);
-        return;
-      }
-
-      if (data) {
-        const dates = new Set(data.map(item => item.unavailable_date));
-        setUnavailableDates(dates);
-      }
     } catch (error) {
-      console.error('Erro inesperado:', error);
+      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
-  }, [currentMonth]);
+  };
 
-  useEffect(() => {
-    fetchUnavailability();
-  }, [fetchUnavailability]);
-
-  // Salvar ou remover indisponibilidade
-  const toggleDateAvailability = async (date: Date) => {
-    if (!isMonthAllowed) {
-      Alert.alert('Aviso', 'Só é permitido alterar a agenda do próximo mês em diante.');
-      return;
-    }
-
+  const loadMonthExceptions = async () => {
     try {
-      setSaving(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const dateStr = format(date, 'yyyy-MM-dd');
-      const isUnavailable = unavailableDates.has(dateStr);
+      const startOfMonthDate = startOfMonth(currentDate);
+      const endOfMonthDate = endOfMonth(currentDate);
 
-      if (isUnavailable) {
-        // Remover indisponibilidade
-        const { error } = await supabase
-          .from('member_unavailability')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('unavailable_date', dateStr);
+      const { data: exceptionsData, error: exceptionsError } = await supabase
+        .from('availability_exceptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('specific_date', startOfMonthDate.toISOString().split('T')[0])
+        .lte('specific_date', endOfMonthDate.toISOString().split('T')[0]);
 
-        if (error) {
-          Alert.alert('Erro', 'Não foi possível remover a indisponibilidade.');
-          return;
-        }
-
-        setUnavailableDates(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(dateStr);
-          return newSet;
-        });
-      } else {
-        // Adicionar indisponibilidade
-        const { error } = await supabase
-          .from('member_unavailability')
-          .insert({
-            user_id: user.id,
-            unavailable_date: dateStr
-          });
-
-        if (error) {
-          Alert.alert('Erro', 'Não foi possível salvar a indisponibilidade.');
-          return;
-        }
-
-        setUnavailableDates(prev => new Set(prev).add(dateStr));
-      }
+      if (exceptionsError) throw exceptionsError;
+      if (exceptionsData) setMonthExceptions(exceptionsData);
+      
     } catch (error) {
-      console.error('Erro ao salvar indisponibilidade:', error);
-      Alert.alert('Erro', 'Ocorreu um erro inesperado.');
+      console.error('Erro ao carregar exceções:', error);
+    }
+  };
+
+  const isAvailable = (serviceDayId: string) => {
+    const dayAvailability = availability.find(a => a.service_day_id === serviceDayId);
+    return dayAvailability ? dayAvailability.is_available : true;
+  };
+
+  const getDayAvailabilityForDate = (date: Date) => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const exception = monthExceptions.find(e => e.specific_date === dateStr);
+    
+    // Se tiver exceção, ela manda
+    if (exception) return exception.is_available;
+    
+    // Se não tiver exceção, olha a rotina do dia da semana
+    const dayOfWeek = getDay(date);
+    const dayServiceDays = serviceDays.filter(sd => sd.day_of_week === dayOfWeek);
+    
+    if (dayServiceDays.length === 0) return true; // Dia sem culto = livre
+    
+    // Se tiver rotina definida para aquele dia de culto
+    return dayServiceDays.some(sd => isAvailable(sd.id));
+  };
+
+  const handleToggleDateAvailability = async (date: Date) => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const currentAvailability = getDayAvailabilityForDate(date);
+    const newAvailability = !currentAvailability;
+    
+    setSaving(prev => ({ ...prev, [dateStr]: true }));
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('availability_exceptions')
+        .upsert({
+          user_id: user.id,
+          specific_date: dateStr,
+          is_available: newAvailability
+        }, {
+          onConflict: 'user_id,specific_date'
+        });
+
+      if (error) throw error;
+      await loadMonthExceptions(); // Recarrega para pintar a cor certa
+      
+    } catch (error) {
+      console.error('Erro ao salvar exceção:', error);
+      Alert.alert('Erro', 'Não foi possível salvar a alteração.');
     } finally {
-      setSaving(false);
+      setSaving(prev => ({ ...prev, [dateStr]: false }));
     }
   };
 
-  // Navegação de mês
-  const goToPreviousMonth = () => {
-    const newMonth = subMonths(currentMonth, 1);
-    // Verificar se o mês anterior ainda é permitido (deve ser >= próximo mês)
-    if (isAfter(startOfMonth(newMonth), startOfMonth(today)) || 
-        isSameMonth(startOfMonth(newMonth), startOfMonth(nextMonthAllowed))) {
-      setCurrentMonth(newMonth);
-    } else {
-      Alert.alert("Atenção", "Você só pode gerenciar a disponibilidade a partir do próximo mês.");
+  const getFilteredDaysInMonth = () => {
+    const start = startOfMonth(currentDate);
+    const end = endOfMonth(currentDate);
+    const allDays = eachDayOfInterval({ start, end });
+    const serviceDayOfWeeks = serviceDays.map(sd => sd.day_of_week);
+    // Só mostra dias que tem culto
+    return allDays.filter(day => serviceDayOfWeeks.includes(getDay(day)));
+  };
+
+  const handleToggleAvailability = async (serviceDayId: string, newValue: boolean) => {
+    setSaving(prev => ({ ...prev, [serviceDayId]: true }));
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('availability_routine')
+        .upsert({
+          user_id: user.id,
+          service_day_id: serviceDayId,
+          is_available: newValue
+        }, {
+          onConflict: 'user_id,service_day_id'
+        });
+
+      if (error) throw error;
+
+      setAvailability(prev => {
+        const filtered = prev.filter(a => a.service_day_id !== serviceDayId);
+        return [...filtered, {
+          user_id: user.id,
+          service_day_id: serviceDayId,
+          is_available: newValue
+        }];
+      });
+      
+      // Recarrega exceções para atualizar visualmente o calendário se necessário
+      loadMonthExceptions();
+
+    } catch (error) {
+      console.error('Erro ao salvar rotina:', error);
+      Alert.alert('Erro', 'Não foi possível salvar a rotina.');
+    } finally {
+      setSaving(prev => ({ ...prev, [serviceDayId]: false }));
     }
-  };
-
-  const goToNextMonth = () => {
-    setCurrentMonth(addMonths(currentMonth, 1));
-  };
-
-  // Gerar dias do mês
-  const getDaysInMonth = () => {
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    const days = eachDayOfInterval({ start, end });
-    
-    // Adicionar dias vazios no início para alinhar com o dia da semana
-    const startDayOfWeek = getDay(start);
-    const emptyDays = Array(startDayOfWeek).fill(null);
-    
-    return [...emptyDays, ...days];
-  };
-
-  const getDayLabel = (dayIndex: number) => {
-    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-    return days[dayIndex];
   };
 
   if (loading) {
     return (
       <View className="flex-1 bg-gray-50 items-center justify-center">
-        <ActivityIndicator size="large" color="#4f46e5" />
-        <Text className="text-gray-500 mt-2">Carregando...</Text>
+        <ActivityIndicator size="large" color="#3b82f6" />
       </View>
     );
   }
 
+  const isAtMinDate = isSameDay(startOfMonth(currentDate), minDate);
+
   return (
     <View className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-white border-b border-gray-200 px-4 py-4">
-        <View className="flex-row items-center justify-between mb-4">
-          <TouchableOpacity 
-            onPress={goToPreviousMonth}
-            className="p-2 rounded-lg bg-gray-100"
-          >
-            <ChevronLeft size={20} color="#374151" />
+      <View className="bg-white border-b border-gray-200 px-4 py-4 mt-8">
+        <View className="flex-row items-center">
+          <TouchableOpacity onPress={() => router.back()} className="mr-4">
+            <ArrowLeft size={24} color="#3b82f6" />
           </TouchableOpacity>
-          
-          <View className="items-center">
-            <Text className="text-xl font-bold text-gray-900">Minha Disponibilidade</Text>
-            <Text className="text-gray-600 text-sm capitalize">
-              {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
-            </Text>
-          </View>
-          
-          <TouchableOpacity 
-            onPress={goToNextMonth}
-            className="p-2 rounded-lg bg-gray-100"
-          >
-            <ChevronRight size={20} color="#374151" />
-          </TouchableOpacity>
+          <Text className="text-xl font-bold text-gray-900">Minha Rotina & Exceções</Text>
         </View>
-
-        {/* Aviso se o mês não for permitido */}
-        {!isMonthAllowed && (
-          <View className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex-row items-center">
-            <AlertCircle size={16} color="#f59e0b" className="mr-2" />
-            <Text className="text-yellow-800 text-sm flex-1">
-              Só é permitido alterar a agenda do próximo mês em diante.
-            </Text>
-          </View>
-        )}
       </View>
 
       <ScrollView className="flex-1 p-4">
-        {/* Legenda */}
-        <View className="bg-white rounded-xl p-4 mb-4 border border-gray-200">
-          <View className="flex-row justify-center space-x-6">
-            <View className="flex-row items-center">
-              <View className="w-4 h-4 bg-red-500 rounded-full mr-2" />
-              <Text className="text-gray-700 text-sm">Não Posso</Text>
-            </View>
-            <View className="flex-row items-center">
-              <View className="w-4 h-4 bg-white border border-gray-300 rounded-full mr-2" />
-              <Text className="text-gray-700 text-sm">Disponível</Text>
-            </View>
-          </View>
+        {/* Aviso de Regra */}
+        <View className="bg-amber-50 rounded-xl p-4 mb-6 border border-amber-200">
+          <Text className="text-amber-900 font-medium text-center text-sm">
+            📅 Alterações permitidas apenas a partir do próximo mês.
+          </Text>
         </View>
 
-        {/* Grade de dias */}
-        <View className="bg-white rounded-xl p-4 border border-gray-200">
-          {/* Dias da semana */}
-          <View className="flex-row mb-2">
-            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day, index) => (
-              <View key={index} className="flex-1 items-center">
-                <Text className="text-xs text-gray-500 font-medium uppercase">
-                  {day}
-                </Text>
+        <Text className="text-gray-900 font-bold text-lg mb-3">Rotina Semanal Padrão</Text>
+
+        {/* Lista de Dias da Rotina Padrão */}
+        {serviceDays.length > 0 ? (
+          serviceDays.map((serviceDay) => {
+            const available = isAvailable(serviceDay.id);
+            const isSaving = saving[serviceDay.id];
+            return (
+              <View key={serviceDay.id} className="bg-white rounded-xl p-4 mb-3 shadow-sm border border-gray-200">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1">
+                    <Text className="text-gray-900 font-semibold text-lg">{fullDayNames[serviceDay.day_of_week]}</Text>
+                    <Text className="text-gray-500 text-sm mt-1">{serviceDay.name}</Text>
+                  </View>
+                  <View className="flex-row items-center">
+                    <Text className={`text-sm font-medium mr-3 ${available ? 'text-green-600' : 'text-red-600'}`}>
+                      {available ? 'Disponível' : 'Indisponível'}
+                    </Text>
+                    <Switch
+                      value={available}
+                      onValueChange={(newValue) => handleToggleAvailability(serviceDay.id, newValue)}
+                      disabled={isSaving}
+                      trackColor={{ false: '#ef4444', true: '#10b981' }}
+                    />
+                  </View>
+                </View>
               </View>
-            ))}
-          </View>
+            );
+          })
+        ) : (
+          <Text className="text-gray-500 text-center py-4">Carregando dias de culto...</Text>
+        )}
 
-          {/* Dias do mês */}
-          {saving ? (
-            <View className="items-center py-8">
-              <ActivityIndicator size="small" color="#4f46e5" />
-              <Text className="text-gray-500 text-sm mt-2">Salvando...</Text>
+        {/* Calendário de Exceções Mensais */}
+        {serviceDays.length > 0 && (
+          <View className="bg-white rounded-xl p-4 mb-10 shadow-sm border border-gray-200 mt-6">
+            <Text className="text-gray-900 font-semibold text-lg mb-4">Ajustes por Data (Exceções)</Text>
+            
+            <View className="flex-row items-center justify-between mb-4">
+              <TouchableOpacity
+                onPress={handlePrevMonth}
+                disabled={isAtMinDate}
+                className={`p-2 rounded-lg ${isAtMinDate ? 'bg-gray-50 opacity-50' : 'bg-gray-100'}`}
+              >
+                <ChevronLeft size={20} color="#374151" />
+              </TouchableOpacity>
+              
+              <Text className="text-gray-900 font-semibold text-lg capitalize">
+                {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
+              </Text>
+              
+              <TouchableOpacity
+                onPress={() => setCurrentDate(addMonths(currentDate, 1))}
+                className="p-2 rounded-lg bg-gray-100"
+              >
+                <ChevronRight size={20} color="#374151" />
+              </TouchableOpacity>
             </View>
-          ) : (
-            <View className="flex-row flex-wrap">
-              {getDaysInMonth().map((day, index) => {
-                if (day === null) {
-                  // Dia vazio para alinhamento
-                  return <View key={`empty-${index}`} className="w-1/7 h-12" />;
-                }
 
-                const dateStr = format(day, 'yyyy-MM-dd');
-                const isUnavailable = unavailableDates.has(dateStr);
-                const isToday = isSameDay(day, today);
+            <View className="flex-row flex-wrap gap-2 justify-center">
+              {getFilteredDaysInMonth().map((date) => {
+                const dateStr = format(date, 'yyyy-MM-dd');
+                const isAvailable = getDayAvailabilityForDate(date);
+                const isSaving = saving[dateStr];
+                const dayName = format(date, 'EEE', { locale: ptBR });
 
                 return (
                   <TouchableOpacity
                     key={dateStr}
-                    onPress={() => toggleDateAvailability(day)}
-                    disabled={!isMonthAllowed}
-                    className={`w-1/7 h-12 items-center justify-center rounded-lg mx-0.5 my-0.5 ${
-                      isUnavailable 
-                        ? 'bg-red-500 border border-red-600' 
-                        : 'bg-white border border-gray-300'
-                    } ${
-                      isToday ? 'ring-2 ring-blue-500' : ''
-                    } ${
-                      !isMonthAllowed ? 'opacity-50' : ''
-                    }`}
+                    onPress={() => handleToggleDateAvailability(date)}
+                    disabled={isSaving}
+                    className={`w-12 h-12 rounded-lg items-center justify-center ${
+                      isAvailable ? 'bg-green-500 border-green-600' : 'bg-red-500 border-red-600'
+                    } border`}
                   >
-                    <Text className={`text-sm font-medium ${
-                      isUnavailable ? 'text-white' : 'text-gray-900'
-                    }`}>
-                      {format(day, 'd')}
-                    </Text>
+                    <Text className="text-white font-bold text-xs">{format(date, 'd')}</Text>
+                    <Text className="text-white font-medium text-xs capitalize">{dayName.substring(0, 3)}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
-          )}
-        </View>
-
-        {/* Informações adicionais */}
-        <View className="mt-4 bg-blue-50 rounded-xl p-4 border border-blue-200">
-          <View className="flex-row items-start">
-            <Calendar size={16} color="#3b82f6" className="mr-2 mt-0.5" />
-            <View className="flex-1">
-              <Text className="text-blue-900 font-medium text-sm mb-1">
-                Como funciona:
-              </Text>
-              <Text className="text-blue-700 text-xs leading-relaxed">
-                • Clique em um dia para marcar como indisponível{'\n'}
-                • Clique novamente para remover a marcação{'\n'}
-                • Apenas o próximo mês em diante pode ser editado{'\n'}
-                • As alterações são salvas automaticamente
-              </Text>
-            </View>
+            
+            <Text className="text-gray-400 text-xs text-center mt-4">
+              Toque em um dia para inverter sua disponibilidade (Exceção)
+            </Text>
           </View>
-        </View>
+        )}
       </ScrollView>
     </View>
   );
