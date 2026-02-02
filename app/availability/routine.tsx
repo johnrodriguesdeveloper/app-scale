@@ -1,11 +1,12 @@
-import { View, Text, Switch, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, Switch, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native'; // Adicionei Alert
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, isBefore } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, isBefore } from 'date-fns'; // Adicionei isBefore
 import { ptBR } from 'date-fns/locale';
 
+// ... (Interfaces e fullDayNames continuam iguais)
 interface ServiceDay {
   id: string;
   day_of_week: number;
@@ -31,10 +32,12 @@ const fullDayNames = [
 export default function AvailabilityRoutineScreen() {
   const router = useRouter();
   
-  // REGRA: Data mínima permitida é o início do próximo mês
+  // 1. AJUSTE: Data mínima permitida é o início do próximo mês
   const minDate = startOfMonth(addMonths(new Date(), 1));
 
+  // 2. AJUSTE: Estado inicial já começa no próximo mês
   const [currentDate, setCurrentDate] = useState(minDate);
+  
   const [serviceDays, setServiceDays] = useState<ServiceDay[]>([]);
   const [availability, setAvailability] = useState<AvailabilityRoutine[]>([]);
   const [monthExceptions, setMonthExceptions] = useState<AvailabilityException[]>([]);
@@ -49,6 +52,7 @@ export default function AvailabilityRoutineScreen() {
     loadMonthExceptions();
   }, [currentDate]);
 
+  // Função para controlar o "Voltar Mês"
   const handlePrevMonth = () => {
     const prevMonth = subMonths(currentDate, 1);
     
@@ -122,17 +126,12 @@ export default function AvailabilityRoutineScreen() {
   const getDayAvailabilityForDate = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
     const exception = monthExceptions.find(e => e.specific_date === dateStr);
-    
-    // Se tiver exceção, ela manda
     if (exception) return exception.is_available;
     
-    // Se não tiver exceção, olha a rotina do dia da semana
     const dayOfWeek = getDay(date);
     const dayServiceDays = serviceDays.filter(sd => sd.day_of_week === dayOfWeek);
     
-    if (dayServiceDays.length === 0) return true; // Dia sem culto = livre
-    
-    // Se tiver rotina definida para aquele dia de culto
+    if (dayServiceDays.length === 0) return true;
     return dayServiceDays.some(sd => isAvailable(sd.id));
   };
 
@@ -158,7 +157,7 @@ export default function AvailabilityRoutineScreen() {
         });
 
       if (error) throw error;
-      await loadMonthExceptions(); // Recarrega para pintar a cor certa
+      await loadMonthExceptions();
       
     } catch (error) {
       console.error('Erro ao salvar exceção:', error);
@@ -173,7 +172,6 @@ export default function AvailabilityRoutineScreen() {
     const end = endOfMonth(currentDate);
     const allDays = eachDayOfInterval({ start, end });
     const serviceDayOfWeeks = serviceDays.map(sd => sd.day_of_week);
-    // Só mostra dias que tem culto
     return allDays.filter(day => serviceDayOfWeeks.includes(getDay(day)));
   };
 
@@ -204,10 +202,6 @@ export default function AvailabilityRoutineScreen() {
           is_available: newValue
         }];
       });
-      
-      // Recarrega exceções para atualizar visualmente o calendário se necessário
-      loadMonthExceptions();
-
     } catch (error) {
       console.error('Erro ao salvar rotina:', error);
       Alert.alert('Erro', 'Não foi possível salvar a rotina.');
@@ -224,16 +218,17 @@ export default function AvailabilityRoutineScreen() {
     );
   }
 
+  // Verifica se estamos no mês mínimo para desabilitar visualmente a seta
   const isAtMinDate = isSameDay(startOfMonth(currentDate), minDate);
 
   return (
     <View className="flex-1 bg-gray-50">
-      <View className="bg-white border-b border-gray-200 px-4 py-4 mt-8">
+      <View className="bg-white border-b border-gray-200 px-4 py-4">
         <View className="flex-row items-center">
           <TouchableOpacity onPress={() => router.back()} className="mr-4">
             <ArrowLeft size={24} color="#3b82f6" />
           </TouchableOpacity>
-          <Text className="text-xl font-bold text-gray-900">Minha Rotina & Exceções</Text>
+          <Text className="text-xl font-bold text-gray-900">Minha Disponibilidade</Text>
         </View>
       </View>
 
@@ -241,13 +236,11 @@ export default function AvailabilityRoutineScreen() {
         {/* Aviso de Regra */}
         <View className="bg-amber-50 rounded-xl p-4 mb-6 border border-amber-200">
           <Text className="text-amber-900 font-medium text-center text-sm">
-            📅 Alterações permitidas apenas a partir do próximo mês.
+            📅 O sistema libera a agenda apenas a partir do próximo mês.
           </Text>
         </View>
 
-        <Text className="text-gray-900 font-bold text-lg mb-3">Rotina Semanal Padrão</Text>
-
-        {/* Lista de Dias da Rotina Padrão */}
+        {/* ... (Lista de Dias da Rotina Padrão - Mantida igual) ... */}
         {serviceDays.length > 0 ? (
           serviceDays.map((serviceDay) => {
             const available = isAvailable(serviceDay.id);
@@ -261,13 +254,14 @@ export default function AvailabilityRoutineScreen() {
                   </View>
                   <View className="flex-row items-center">
                     <Text className={`text-sm font-medium mr-3 ${available ? 'text-green-600' : 'text-red-600'}`}>
-                      {available ? 'Disponível' : 'Indisponível'}
+                      {available ? 'Disponível' : 'Indisponíve'}
                     </Text>
-                    <Switch
+                     <Switch
                       value={available}
                       onValueChange={(newValue) => handleToggleAvailability(serviceDay.id, newValue)}
                       disabled={isSaving}
                       trackColor={{ false: '#ef4444', true: '#10b981' }}
+                      thumbColor={isSaving ? '#9ca3af' : '#ffffff'}
                     />
                   </View>
                 </View>
@@ -280,13 +274,13 @@ export default function AvailabilityRoutineScreen() {
 
         {/* Calendário de Exceções Mensais */}
         {serviceDays.length > 0 && (
-          <View className="bg-white rounded-xl p-4 mb-10 shadow-sm border border-gray-200 mt-6">
+          <View className="bg-white rounded-xl p-4 mb-3 shadow-sm border border-gray-200 mt-4">
             <Text className="text-gray-900 font-semibold text-lg mb-4">Ajustes por Data (Exceções)</Text>
             
             <View className="flex-row items-center justify-between mb-4">
               <TouchableOpacity
                 onPress={handlePrevMonth}
-                disabled={isAtMinDate}
+                disabled={isAtMinDate} // Desabilita o clique
                 className={`p-2 rounded-lg ${isAtMinDate ? 'bg-gray-50 opacity-50' : 'bg-gray-100'}`}
               >
                 <ChevronLeft size={20} color="#374151" />
@@ -326,10 +320,6 @@ export default function AvailabilityRoutineScreen() {
                 );
               })}
             </View>
-            
-            <Text className="text-gray-400 text-xs text-center mt-4">
-              Toque em um dia para inverter sua disponibilidade (Exceção)
-            </Text>
           </View>
         )}
       </ScrollView>

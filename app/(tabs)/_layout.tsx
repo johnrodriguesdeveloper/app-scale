@@ -108,6 +108,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="settings/schedule"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Configurações',

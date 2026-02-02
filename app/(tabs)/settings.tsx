@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { LogOut, User } from 'lucide-react-native';
+import { LogOut, User, Calendar } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
 export default function SettingsScreen() {
@@ -79,6 +79,18 @@ export default function SettingsScreen() {
             </>
           )}
         </View>
+
+        {/* Agenda da Igreja */}
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/settings/schedule')}
+          className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-200"
+        >
+          <View className="flex-row items-center">
+            <Calendar size={24} color="#3b82f6" />
+            <Text className="text-lg font-semibold text-gray-900 ml-3">Agenda da Igreja</Text>
+          </View>
+          <Text className="text-gray-500 text-sm mt-2">Gerenciar dias de culto e eventos</Text>
+        </TouchableOpacity>
 
         {/* Sair */}
         <TouchableOpacity

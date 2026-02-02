@@ -1,8 +1,9 @@
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash } from 'lucide-react-native';
+import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash, Calendar, Shield } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+
 
 export default function DepartmentDetailsScreen() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function DepartmentDetailsScreen() {
   const [functions, setFunctions] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMaster, setIsMaster] = useState(false);
+  const [isLeader, setIsLeader] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [newFunctionName, setNewFunctionName] = useState('');
@@ -62,6 +64,8 @@ export default function DepartmentDetailsScreen() {
 
   // Verificar se é admin e carregar dados
   useEffect(() => {
+    console.log('Iniciando carga para ID:', id);
+    
     async function loadData() {
       setLoading(true);
       setDepartment(null);
@@ -71,14 +75,17 @@ export default function DepartmentDetailsScreen() {
       setFunctions([]);
       setIsAdmin(false);
       setIsMaster(false);
+      setIsLeader(false);
 
       if (!id) {
+        console.log('ID não fornecido, retornando...');
         setLoading(false);
         return;
       }
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
+        console.log('Usuário não autenticado, retornando...');
         setLoading(false);
         return;
       }
@@ -97,12 +104,29 @@ export default function DepartmentDetailsScreen() {
         setIsAdmin(adminStatus);
       }
 
+      // Verificar se é líder deste departamento específico
+      const { data: leaderCheck } = await supabase
+        .from('department_leaders')
+        .select('id')
+        .eq('department_id', id)
+        .eq('user_id', user.id)
+        .single();
+      
+      if (leaderCheck) setIsLeader(true);
+
       // Buscar detalhes do departamento
-      const { data: dept } = await supabase
+      const { data: dept, error } = await supabase
         .from('departments')
         .select('id, name, description, priority_order, availability_deadline_day, parent_id, organization_id')
         .eq('id', id)
         .single();
+
+      if (error) {
+        console.error('ERRO AO BUSCAR DEPARTAMENTO:', error);
+        console.log('ID Recebido:', id);
+      } else {
+        console.log('Departamento encontrado:', dept);
+      }
 
       if (dept) {
         setDepartment(dept);
@@ -397,15 +421,48 @@ export default function DepartmentDetailsScreen() {
               <TouchableOpacity
                 onPress={() =>
                   router.push({
-                    pathname: '/departments/[id]',
-                    params: { id: String(parentDepartment.id) },
+                    pathname: '/(tabs)/departments/[id]',
+                    params: { id: parentDepartment.id }
                   })
                 }
-                className="mt-2"
+                className="flex-row items-center mt-1"
               >
-                <Text className="text-blue-600 text-sm font-semibold">Voltar para {parentDepartment.name}</Text>
+                <Text className="text-gray-500 text-sm">{parentDepartment.name}</Text>
               </TouchableOpacity>
             )}
+          </View>
+          {/* Botões de ação */}
+          <View className="flex-row gap-2">
+            {(isAdmin || isMaster) && (
+              <TouchableOpacity
+                onPress={() => router.push({
+                  pathname: '/department-leaders', // Nova rota na raiz
+                  params: { 
+                    departmentId: String(id),
+                    departmentName: department?.name || 'Departamento'
+                  }
+                })}
+                className="bg-amber-600 rounded-lg px-3 py-2 flex-row items-center"
+              >
+                <Shield size={16} color="white" style={{ marginRight: 4 }} />
+                <Text className="text-white font-semibold text-sm">Liderança</Text>
+              </TouchableOpacity>
+            )}
+            {(isAdmin || isMaster || isLeader) && (
+            <TouchableOpacity
+              onPress={() => router.push({
+                pathname: '/department-roster',
+                params: { 
+                  departmentId: String(id),
+                  departmentName: department.name 
+                }
+              })}
+              className="bg-blue-600 rounded-lg px-3 py-2 flex-row items-center"
+            >
+              <Calendar size={16} color="white" style={{ marginRight: 4 }} />
+              <Text className="text-white font-semibold text-sm">Gerenciar Escala</Text>
+            </TouchableOpacity>
+          )}
           </View>
         </View>
 
