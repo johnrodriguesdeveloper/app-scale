@@ -42,7 +42,6 @@ export default function DepartmentRosterScreen() {
   }, [departmentId]);
 
   useEffect(() => {
-    // Só calcula se tiver dados básicos
     if (selectedDate && serviceDays.length > 0 && members.length > 0) {
       setCalculating(true);
       Promise.all([
@@ -123,27 +122,23 @@ export default function DepartmentRosterScreen() {
     if (data) setRosterEntries(data);
   };
 
-  // --- CÁLCULO DE QUEM ESCONDER (DEBUG) ---
+  // --- CÁLCULO TURBINADO COM CONFLITO DE DEPARTAMENTOS ---
   const calculateHiddenUsers = async (date: Date) => {
     try {
       const dayOfWeek = getDay(date); 
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      console.log(`\n=== DEBUG CÁLCULO PARA ${dateStr} ===`);
-      console.log(`Membros totais analisados: ${members.length}`);
+      console.log(`\n=== CALCULANDO DISPONIBILIDADE PARA ${dateStr} ===`);
 
       const currentServiceDay = serviceDays.find(sd => sd.day_of_week === dayOfWeek);
-      console.log(`Dia de culto: ${currentServiceDay?.name} (ID: ${currentServiceDay?.id})`);
 
-      // 1. Exceções
+      // 1. Exceções (Membro disse "Não Posso")
       const { data: exceptions } = await supabase
         .from('availability_exceptions')
         .select('user_id, is_available')
         .eq('specific_date', dateStr);
-      
-      console.log(`Exceções encontradas no banco:`, exceptions);
 
-      // 2. Rotinas
+      // 2. Rotinas (Regra padrão do dia)
       let routines: any[] = [];
       if (currentServiceDay) {
         const { data: routineData } = await supabase
@@ -151,8 +146,25 @@ export default function DepartmentRosterScreen() {
           .select('user_id, is_available')
           .eq('service_day_id', currentServiceDay.id);
         routines = routineData || [];
-        console.log(`Rotinas encontradas para este dia de culto:`, routines);
       }
+
+      // 3. CONFLITOS REAIS (Novo!) - Já está escalado em QUALQUER departamento?
+      // Buscamos na tabela rosters qualquer escala nessa data
+      // Usamos !inner no join para pegar o user_id real da pessoa
+      const { data: conflicts } = await supabase
+        .from('rosters')
+        .select(`
+          member_id,
+          department_members!inner ( user_id )
+        `)
+        .eq('schedule_date', dateStr);
+      
+      // Criamos um Set com os IDs dos usuários que já estão trabalhando hoje
+      const busyUserIds = new Set(
+        conflicts?.map((c: any) => c.department_members?.user_id) || []
+      );
+      
+      console.log(`Usuários já escalados hoje (em qualquer depto):`, Array.from(busyUserIds));
 
       const hiddenSet = new Set<string>();
 
@@ -160,9 +172,16 @@ export default function DepartmentRosterScreen() {
         const userId = member.user_id;
         const userName = member.profiles?.full_name || 'Sem nome';
         
-        let finalAvailability = true; // Disponível até que se prove o contrário
+        // Regra 1: Está ocupado em outro lugar?
+        if (busyUserIds.has(userId)) {
+          console.log(`🚫 ${userName} escondido: Já está escalado.`);
+          hiddenSet.add(userId);
+          return; // Nem precisa checar o resto, já tá ocupado
+        }
 
-        // A. Checa Rotina
+        let finalAvailability = true;
+
+        // Regra 2: Rotina
         if (currentServiceDay) {
           const userRoutine = routines.find(r => r.user_id === userId);
           if (userRoutine) {
@@ -170,26 +189,22 @@ export default function DepartmentRosterScreen() {
           }
         }
 
-        // B. Checa Exceção
+        // Regra 3: Exceção (Ganha da Rotina)
         const userException = exceptions?.find(e => e.user_id === userId);
         if (userException) {
           finalAvailability = userException.is_available;
         }
 
-        // Resultado
         if (!finalAvailability) {
-          console.log(`❌ BLOQUEADO: ${userName} (ID: ${userId})`);
+          console.log(`🚫 ${userName} escondido: Indisponibilidade marcada.`);
           hiddenSet.add(userId);
-        } else {
-          // console.log(`✅ DISPONÍVEL: ${userName}`); // Descomente se quiser ver os disponíveis
         }
       });
 
-      console.log(`Total bloqueados: ${hiddenSet.size}`);
       setHiddenUserIds(Array.from(hiddenSet));
 
     } catch (error) {
-      console.error("Erro CRÍTICO no cálculo:", error);
+      console.error("Erro no cálculo:", error);
     }
   };
 
@@ -205,6 +220,8 @@ export default function DepartmentRosterScreen() {
       if (error) throw error;
       setShowMemberSelect(false);
       fetchRosterForDate(selectedDate);
+      // Recalcular disponibilidade para esconder quem acabou de ser adicionado
+      calculateHiddenUsers(selectedDate);
     } catch (err: any) {
       Alert.alert("Erro", err.message);
     }
@@ -213,9 +230,10 @@ export default function DepartmentRosterScreen() {
   const handleRemoveFromRoster = async (rosterId: string) => {
     await supabase.from('rosters').delete().eq('id', rosterId);
     fetchRosterForDate(selectedDate);
+    // Recalcular para mostrar a pessoa de volta na lista
+    calculateHiddenUsers(selectedDate);
   };
 
-  // --- FILTRO FINAL ---
   const filteredMembers = members.filter(member => {
     const isCorrectFunction = member.function_id === selectedFunctionId;
     const isAvailable = !hiddenUserIds.includes(member.user_id);
@@ -354,7 +372,7 @@ export default function DepartmentRosterScreen() {
             {calculating ? (
               <View className="p-10 items-center">
                 <ActivityIndicator color="#2563eb" />
-                <Text className="text-gray-400 mt-2">Verificando agenda...</Text>
+                <Text className="text-gray-400 mt-2">Verificando agenda de todos...</Text>
               </View>
             ) : (
               <FlatList 
@@ -366,7 +384,7 @@ export default function DepartmentRosterScreen() {
                     <Filter size={40} color="#ccc" />
                     <Text className="text-gray-500 mt-4 text-center font-bold">Ninguém disponível</Text>
                     <Text className="text-gray-400 text-center mt-1 text-sm">
-                      Todos os membros desta função marcaram indisponibilidade para hoje.
+                      Todos os membros já estão escalados ou indisponíveis hoje.
                     </Text>
                   </View>
                 }
