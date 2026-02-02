@@ -185,13 +185,29 @@ const members = await getAvailableMembersByFunction(
 Este projeto é privado e proprietário.
 
 
-TODO 
 
-- [ X ] Membro só preenche disponibilidade da escala para proximo mês 
-- [ ] Mais de uma função por membro
-- [ ] Não aparece domingo EBD no calendario
-- [ ] Botões de voltar indo para tela inicial
-- [ ] Melhorar UI/UX (Header, cores, etc)
-- [ ] Equipes do Departamento infantil
-- [ ] Fazer um Header melhor
-- [ ] Config README
+## 🗺️ Roadmap & To-Do
+
+### 🧱 Bloco 1: Segurança & Integridade
+> Prioridade Máxima: Garantir que as regras de negócio sejam respeitadas no banco.
+- [ ] Configurar RLS no Supabase para impedir delete/insert de escalas por não-líderes
+
+### 🧱 Bloco 2: Identidade do Usuário
+- [ ] Criar fluxo de Upload de Avatar (Foto do perfil)
+- [ ] Exibir foto real do usuário nas listas de escala
+
+### 🧱 Bloco 3: Refinamento & Bugs (Fixes)
+- [ ] **Bug:** Domingo de EBD não está aparecendo no calendário
+- [ ] **Nav:** Corrigir botões de "Voltar" (evitar loop para tela inicial)
+
+### 🧱 Bloco 4: Lógica Avançada
+- [x] Membro só preenche disponibilidade a partir do próximo mês
+- [ ] Permitir mais de uma função por membro (N:N)
+- [ ] Implementar lógica de Equipes para o Depto. Infantil
+
+### 🧱 Bloco 5: UI/UX (Visual)
+- [ ] Melhorar UI Geral (Cores, espaçamentos)
+- [ ] Criar componente de Header padronizado e melhorado
+
+### 🧱 Bloco 6: Documentação
+- [ ] Criar `README_AI.md` com contexto do banco e regras para facilitar o desenvolvimento com IA
