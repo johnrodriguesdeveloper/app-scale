@@ -190,7 +190,7 @@ Este projeto é privado e proprietário.
 
 ### 🧱 Bloco 1: Segurança & Integridade
 > Prioridade Máxima: Garantir que as regras de negócio sejam respeitadas no banco.
-- [ ] Configurar RLS no Supabase para impedir delete/insert de escalas por não-líderes
+- [ x ] Configurar RLS no Supabase para impedir delete/insert de escalas por não-líderes
 
 ### 🧱 Bloco 2: Identidade do Usuário
 - [ ] Criar fluxo de Upload de Avatar (Foto do perfil)
