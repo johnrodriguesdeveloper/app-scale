@@ -1,37 +1,56 @@
-import { View, Text, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
-import { Calendar, Clock, MapPin } from 'lucide-react-native';
+import { View, Text, ScrollView, TouchableOpacity, SafeAreaView, Image } from 'react-native';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Calendar, Clock, MapPin, User } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+
+interface Profile {
+  full_name: string;
+  avatar_url: string | null;
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const [userName, setUserName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchUserData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserData();
+    }, [])
+  );
 
   const fetchUserData = async () => {
     try {
+      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('full_name')
+        .select('full_name, avatar_url')
         .eq('user_id', user.id)
         .single();
 
       if (profile) {
         setUserName(profile.full_name?.split(' ')[0] || 'Membro');
+        setAvatarUrl(profile.avatar_url);
       }
     } catch (error) {
       console.error('Erro ao buscar dados do usuário:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   if (loading) {
@@ -47,8 +66,29 @@ export default function HomeScreen() {
       <ScrollView className="flex-1">
         {/* Header */}
         <View className="bg-white px-6 py-8 border-b border-gray-200">
-          <Text className="text-gray-600 text-lg">Olá,</Text>
-          <Text className="text-2xl font-bold text-gray-900">{userName} 👋</Text>
+          <View className="flex-row items-center justify-between">
+            <View>
+              <Text className="text-gray-600 text-lg">Olá,</Text>
+              <Text className="text-2xl font-bold text-gray-900">{userName} 👋</Text>
+            </View>
+            
+            {/* Avatar clicável */}
+            <TouchableOpacity 
+              onPress={() => router.push('/profile')}
+              className="relative"
+            >
+              {avatarUrl ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  className="w-12 h-12 rounded-full"
+                />
+              ) : (
+                <View className="w-12 h-12 bg-gray-300 rounded-full items-center justify-center">
+                  <User size={20} color="#6b7280" />
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Conteúdo */}
