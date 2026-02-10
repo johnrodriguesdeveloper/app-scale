@@ -193,15 +193,12 @@ Este projeto é privado e proprietário.
 - [ x ] Configurar RLS no Supabase para impedir delete/insert de escalas por não-líderes
 
 ### 🧱 Bloco 2: Identidade do Usuário
-- [ ] Criar fluxo de Upload de Avatar (Foto do perfil)
-- [ ] Exibir foto real do usuário nas listas de escala
+- [ x ] Criar fluxo de Upload de Avatar (Foto do perfil)
 
 ### 🧱 Bloco 3: Refinamento & Bugs (Fixes)
-- [ ] **Bug:** Domingo de EBD não está aparecendo no calendário
-- [ ] **Nav:** Corrigir botões de "Voltar" (evitar loop para tela inicial)
+- [ x ] **Bug:** Domingo de EBD não está aparecendo no calendário
 
 ### 🧱 Bloco 4: Lógica Avançada
-- [x] Membro só preenche disponibilidade a partir do próximo mês
 - [ ] Permitir mais de uma função por membro (N:N)
 - [ ] Implementar lógica de Equipes para o Depto. Infantil
 
