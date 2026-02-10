@@ -1,9 +1,9 @@
 import { View, Text, Switch, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, isBefore } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface ServiceDay {
@@ -21,6 +21,7 @@ interface AvailabilityRoutine {
 interface AvailabilityException {
   user_id: string;
   specific_date: string;
+  service_day_id?: string;
   is_available: boolean;
 }
 
@@ -31,61 +32,60 @@ const fullDayNames = [
 export default function AvailabilityRoutineScreen() {
   const router = useRouter();
   
-  // REGRA: Data mínima permitida é o início do próximo mês
+  // Data mínima: próximo mês
   const minDate = startOfMonth(addMonths(new Date(), 1));
 
-  const [currentDate, setCurrentDate] = useState(minDate);
+  const [currentMonth, setCurrentMonth] = useState(minDate);
   const [serviceDays, setServiceDays] = useState<ServiceDay[]>([]);
   const [availability, setAvailability] = useState<AvailabilityRoutine[]>([]);
   const [monthExceptions, setMonthExceptions] = useState<AvailabilityException[]>([]);
+  
+  const [expandedCalendar, setExpandedCalendar] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<{ [key: string]: boolean }>({});
 
+  // 1. Carga Inicial
   useEffect(() => {
     loadData();
   }, []);
 
+  // 2. Carrega Exceções quando muda o mês
   useEffect(() => {
-    loadMonthExceptions();
-  }, [currentDate]);
-
-  const handlePrevMonth = () => {
-    const prevMonth = subMonths(currentDate, 1);
-    
-    // Se tentar voltar para antes da data mínima, bloqueia
-    if (isBefore(prevMonth, minDate)) {
-      Alert.alert("Bloqueado", "Você só pode alterar a disponibilidade a partir do próximo mês.");
-      return;
+    if (serviceDays.length > 0) {
+      loadMonthExceptions();
     }
-    
-    setCurrentDate(prevMonth);
-  };
+  }, [currentMonth, serviceDays]);
+
+  // 3. O SEGREDO: Recalcula o visual sempre que qualquer dado mudar (Rotina ou Exceção)
+  useEffect(() => {
+    if (serviceDays.length > 0) {
+      const start = startOfMonth(currentMonth);
+      const end = endOfMonth(currentMonth);
+      generateExpandedCalendar(start, end, serviceDays, monthExceptions, availability);
+    }
+  }, [availability, monthExceptions, currentMonth, serviceDays]);
 
   const loadData = async () => {
     try {
-      // Buscar dias de culto
-      const { data: serviceData, error: serviceError } = await supabase
+      const { data: serviceData } = await supabase
         .from('service_days')
         .select('*')
         .order('day_of_week', { ascending: true });
 
-      if (serviceError) throw serviceError;
       if (serviceData) setServiceDays(serviceData);
 
-      // Buscar rotina
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: availabilityData, error: availabilityError } = await supabase
+      const { data: routineData } = await supabase
         .from('availability_routine')
         .select('*')
         .eq('user_id', user.id);
 
-      if (availabilityError) throw availabilityError;
-      if (availabilityData) setAvailability(availabilityData);
+      if (routineData) setAvailability(routineData);
 
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -96,242 +96,255 @@ export default function AvailabilityRoutineScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const startOfMonthDate = startOfMonth(currentDate);
-      const endOfMonthDate = endOfMonth(currentDate);
+      const start = startOfMonth(currentMonth);
+      const end = endOfMonth(currentMonth);
 
-      const { data: exceptionsData, error: exceptionsError } = await supabase
+      const { data } = await supabase
         .from('availability_exceptions')
         .select('*')
         .eq('user_id', user.id)
-        .gte('specific_date', startOfMonthDate.toISOString().split('T')[0])
-        .lte('specific_date', endOfMonthDate.toISOString().split('T')[0]);
+        .gte('specific_date', start.toISOString())
+        .lte('specific_date', end.toISOString());
 
-      if (exceptionsError) throw exceptionsError;
-      if (exceptionsData) setMonthExceptions(exceptionsData);
+      if (data) setMonthExceptions(data);
       
+      // Nota: Não chamamos generateExpandedCalendar aqui, o useEffect cuida disso
+
     } catch (error) {
-      console.error('Erro ao carregar exceções:', error);
+      console.error(error);
     }
   };
 
-  const isAvailable = (serviceDayId: string) => {
-    const dayAvailability = availability.find(a => a.service_day_id === serviceDayId);
-    return dayAvailability ? dayAvailability.is_available : true;
+  const generateExpandedCalendar = (
+    start: Date, 
+    end: Date, 
+    services: ServiceDay[], 
+    exceptions: AvailabilityException[],
+    currentAvailability: AvailabilityRoutine[] // Recebe a rotina atualizada
+  ) => {
+    const daysInterval = eachDayOfInterval({ start, end });
+    const calendarItems: any[] = [];
+
+    daysInterval.forEach(date => {
+      const dayOfWeek = getDay(date);
+      const daysServices = services.filter(s => s.day_of_week === dayOfWeek);
+
+      daysServices.forEach(service => {
+        // Status Padrão (Rotina) - Usa a variável atualizada
+        const routine = currentAvailability.find(r => r.service_day_id === service.id);
+        const isRoutineAvailable = routine ? routine.is_available : true; 
+
+        // Status Exceção
+        const dateStr = format(date, 'yyyy-MM-dd');
+        const exception = exceptions.find(e => 
+          e.specific_date === dateStr && 
+          (e.service_day_id === service.id || e.service_day_id === null)
+        );
+
+        // A Lógica: Se tem exceção, ela manda. Se não, manda a rotina.
+        const finalStatus = exception ? exception.is_available : isRoutineAvailable;
+
+        calendarItems.push({
+          date: date,
+          dateStr: dateStr,
+          service: service,
+          isAvailable: finalStatus,
+          isException: !!exception,
+          key: `${dateStr}-${service.id}`
+        });
+      });
+    });
+
+    setExpandedCalendar(calendarItems);
   };
 
-  const getDayAvailabilityForDate = (date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const exception = monthExceptions.find(e => e.specific_date === dateStr);
-    
-    // Se tiver exceção, ela manda
-    if (exception) return exception.is_available;
-    
-    // Se não tiver exceção, olha a rotina do dia da semana
-    const dayOfWeek = getDay(date);
-    const dayServiceDays = serviceDays.filter(sd => sd.day_of_week === dayOfWeek);
-    
-    if (dayServiceDays.length === 0) return true; // Dia sem culto = livre
-    
-    // Se tiver rotina definida para aquele dia de culto
-    return dayServiceDays.some(sd => isAvailable(sd.id));
-  };
+  const handleToggleException = async (item: any, newValue: boolean) => {
+    const itemKey = item.key;
+    setSaving(prev => ({ ...prev, [itemKey]: true }));
 
-  const handleToggleDateAvailability = async (date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const currentAvailability = getDayAvailabilityForDate(date);
-    const newAvailability = !currentAvailability;
-    
-    setSaving(prev => ({ ...prev, [dateStr]: true }));
-    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Atualização Otimista (Visual instantâneo)
+      const optimisticException = {
+        user_id: user.id,
+        specific_date: item.dateStr,
+        service_day_id: item.service.id,
+        is_available: newValue
+      };
+
+      setMonthExceptions(prev => {
+        // Remove antiga se existir e adiciona nova
+        const filtered = prev.filter(e => 
+          !(e.specific_date === item.dateStr && e.service_day_id === item.service.id)
+        );
+        return [...filtered, optimisticException];
+      });
+
+      // Atualiza Banco
       const { error } = await supabase
         .from('availability_exceptions')
-        .upsert({
-          user_id: user.id,
-          specific_date: dateStr,
-          is_available: newAvailability
-        }, {
-          onConflict: 'user_id,specific_date'
+        .upsert(optimisticException, {
+          onConflict: 'user_id,specific_date,service_day_id'
         });
 
       if (error) throw error;
-      await loadMonthExceptions(); // Recarrega para pintar a cor certa
-      
+
     } catch (error) {
-      console.error('Erro ao salvar exceção:', error);
-      Alert.alert('Erro', 'Não foi possível salvar a alteração.');
+      Alert.alert("Erro", "Não foi possível salvar.");
+      // Rollback se der erro (recarrega do banco)
+      loadMonthExceptions();
     } finally {
-      setSaving(prev => ({ ...prev, [dateStr]: false }));
+      setSaving(prev => ({ ...prev, [itemKey]: false }));
     }
   };
 
-  const getFilteredDaysInMonth = () => {
-    const start = startOfMonth(currentDate);
-    const end = endOfMonth(currentDate);
-    const allDays = eachDayOfInterval({ start, end });
-    const serviceDayOfWeeks = serviceDays.map(sd => sd.day_of_week);
-    // Só mostra dias que tem culto
-    return allDays.filter(day => serviceDayOfWeeks.includes(getDay(day)));
-  };
-
-  const handleToggleAvailability = async (serviceDayId: string, newValue: boolean) => {
-    setSaving(prev => ({ ...prev, [serviceDayId]: true }));
-
+  const handleToggleRoutine = async (serviceDayId: string, value: boolean) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      const { error } = await supabase
-        .from('availability_routine')
-        .upsert({
-          user_id: user.id,
-          service_day_id: serviceDayId,
-          is_available: newValue
-        }, {
-          onConflict: 'user_id,service_day_id'
-        });
-
-      if (error) throw error;
-
+      
+      // 1. Atualiza visualmente IMEDIATAMENTE (Otimista)
       setAvailability(prev => {
         const filtered = prev.filter(a => a.service_day_id !== serviceDayId);
-        return [...filtered, {
-          user_id: user.id,
-          service_day_id: serviceDayId,
-          is_available: newValue
-        }];
+        return [...filtered, { user_id: user.id, service_day_id: serviceDayId, is_available: value }];
       });
-      
-      // Recarrega exceções para atualizar visualmente o calendário se necessário
-      loadMonthExceptions();
 
-    } catch (error) {
-      console.error('Erro ao salvar rotina:', error);
-      Alert.alert('Erro', 'Não foi possível salvar a rotina.');
-    } finally {
-      setSaving(prev => ({ ...prev, [serviceDayId]: false }));
+      // 2. Salva no banco em segundo plano
+      await supabase.from('availability_routine').upsert({
+        user_id: user.id, service_day_id: serviceDayId, is_available: value
+      }, { onConflict: 'user_id,service_day_id' });
+      
+    } catch (e) { 
+      console.error(e); 
+      // Se der erro, poderíamos reverter aqui, mas loadData na montagem garante consistência
     }
   };
 
-  if (loading) {
-    return (
-      <View className="flex-1 bg-gray-50 items-center justify-center">
-        <ActivityIndicator size="large" color="#3b82f6" />
-      </View>
-    );
-  }
+  const isAtMinDate = isSameDay(startOfMonth(currentMonth), minDate);
 
-  const isAtMinDate = isSameDay(startOfMonth(currentDate), minDate);
+  if (loading) return <View className="flex-1 items-center justify-center bg-white"><ActivityIndicator color="#2563eb"/></View>;
 
   return (
     <View className="flex-1 bg-gray-50">
-      <View className="bg-white border-b border-gray-200 px-4 py-4 mt-8">
-        <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => router.back()} className="mr-4">
-            <ArrowLeft size={24} color="#3b82f6" />
-          </TouchableOpacity>
-          <Text className="text-xl font-bold text-gray-900">Minha Rotina & Exceções</Text>
-        </View>
+      {/* Header */}
+      <View className="bg-white px-4 pt-12 pb-4 border-b border-gray-200 flex-row items-center">
+        <TouchableOpacity onPress={() => router.back()} className="mr-4">
+          <ArrowLeft size={24} color="#3b82f6" />
+        </TouchableOpacity>
+        <Text className="text-xl font-bold text-gray-900">Minha Disponibilidade</Text>
       </View>
 
       <ScrollView className="flex-1 p-4">
-        {/* Aviso de Regra */}
-        <View className="bg-amber-50 rounded-xl p-4 mb-6 border border-amber-200">
-          <Text className="text-amber-900 font-medium text-center text-sm">
-            📅 Alterações permitidas apenas a partir do próximo mês.
-          </Text>
+        
+        {/* Aviso */}
+        <View className="bg-amber-50 rounded-xl p-3 mb-6 border border-amber-200 flex-row items-center justify-center">
+           <AlertCircle size={16} color="#92400e" className="mr-2"/>
+           <Text className="text-amber-900 font-medium text-xs">
+             Ajustes aqui sobrepõem a rotina padrão.
+           </Text>
         </View>
 
-        <Text className="text-gray-900 font-bold text-lg mb-3">Rotina Semanal Padrão</Text>
-
-        {/* Lista de Dias da Rotina Padrão */}
-        {serviceDays.length > 0 ? (
-          serviceDays.map((serviceDay) => {
-            const available = isAvailable(serviceDay.id);
-            const isSaving = saving[serviceDay.id];
+        {/* --- SEÇÃO 1: ROTINA PADRÃO --- */}
+        <Text className="text-gray-900 font-bold text-lg mb-3">Rotina Semanal (Padrão)</Text>
+        <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-8 shadow-sm">
+          {serviceDays.map((day, index) => {
+            const routine = availability.find(r => r.service_day_id === day.id);
+            const isOn = routine ? routine.is_available : true; 
             return (
-              <View key={serviceDay.id} className="bg-white rounded-xl p-4 mb-3 shadow-sm border border-gray-200">
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-1">
-                    <Text className="text-gray-900 font-semibold text-lg">{fullDayNames[serviceDay.day_of_week]}</Text>
-                    <Text className="text-gray-500 text-sm mt-1">{serviceDay.name}</Text>
-                  </View>
-                  <View className="flex-row items-center">
-                    <Text className={`text-sm font-medium mr-3 ${available ? 'text-green-600' : 'text-red-600'}`}>
-                      {available ? 'Disponível' : 'Indisponível'}
-                    </Text>
-                    <Switch
-                      value={available}
-                      onValueChange={(newValue) => handleToggleAvailability(serviceDay.id, newValue)}
-                      disabled={isSaving}
-                      trackColor={{ false: '#ef4444', true: '#10b981' }}
-                    />
-                  </View>
+              <View key={day.id} className={`p-4 flex-row justify-between items-center ${index < serviceDays.length -1 ? 'border-b border-gray-100' : ''}`}>
+                <View>
+                  <Text className="font-bold text-gray-800 text-base">{fullDayNames[day.day_of_week]}</Text>
+                  <Text className="text-gray-500 text-sm">{day.name}</Text>
                 </View>
+                <Switch 
+                  value={isOn} 
+                  onValueChange={(val) => handleToggleRoutine(day.id, val)}
+                  trackColor={{ false: '#e5e7eb', true: '#2563eb' }}
+                />
               </View>
             );
-          })
-        ) : (
-          <Text className="text-gray-500 text-center py-4">Carregando dias de culto...</Text>
-        )}
+          })}
+        </View>
 
-        {/* Calendário de Exceções Mensais */}
-        {serviceDays.length > 0 && (
-          <View className="bg-white rounded-xl p-4 mb-10 shadow-sm border border-gray-200 mt-6">
-            <Text className="text-gray-900 font-semibold text-lg mb-4">Ajustes por Data (Exceções)</Text>
-            
-            <View className="flex-row items-center justify-between mb-4">
-              <TouchableOpacity
-                onPress={handlePrevMonth}
-                disabled={isAtMinDate}
-                className={`p-2 rounded-lg ${isAtMinDate ? 'bg-gray-50 opacity-50' : 'bg-gray-100'}`}
-              >
-                <ChevronLeft size={20} color="#374151" />
-              </TouchableOpacity>
-              
-              <Text className="text-gray-900 font-semibold text-lg capitalize">
-                {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
-              </Text>
-              
-              <TouchableOpacity
-                onPress={() => setCurrentDate(addMonths(currentDate, 1))}
-                className="p-2 rounded-lg bg-gray-100"
-              >
-                <ChevronRight size={20} color="#374151" />
-              </TouchableOpacity>
+        {/* --- SEÇÃO 2: EXCEÇÕES (LISTA VERTICAL) --- */}
+        <View className="flex-row items-center justify-between mb-4 mt-2">
+           <TouchableOpacity 
+             disabled={isAtMinDate}
+             onPress={() => setCurrentMonth(subMonths(currentMonth, 1))}
+             className={`p-2 rounded-full ${isAtMinDate ? 'opacity-30' : 'bg-gray-200'}`}
+           >
+             <ChevronLeft size={20} color="#000"/>
+           </TouchableOpacity>
+           <Text className="text-lg font-bold capitalize text-gray-900">
+             {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+           </Text>
+           <TouchableOpacity 
+             onPress={() => setCurrentMonth(addMonths(currentMonth, 1))}
+             className="p-2 rounded-full bg-gray-200"
+           >
+             <ChevronRight size={20} color="#000"/>
+           </TouchableOpacity>
+        </View>
+
+        {/* LISTA VERTICAL DE DATAS */}
+        <View className="pb-10">
+          {expandedCalendar.map((item) => (
+            <View 
+              key={item.key} 
+              className={`mb-3 bg-white rounded-xl p-3 border flex-row items-center shadow-sm ${
+                item.isAvailable ? 'border-gray-100' : 'border-red-100 bg-red-50'
+              }`}
+            >
+               {/* Box da Data */}
+               <View className={`w-14 h-14 rounded-lg items-center justify-center mr-4 ${
+                 item.isAvailable ? 'bg-gray-100' : 'bg-red-100'
+               }`}>
+                  <Text className={`text-xs font-bold uppercase ${
+                    item.isAvailable ? 'text-gray-500' : 'text-red-500'
+                  }`}>
+                    {format(item.date, 'EEE', { locale: ptBR })}
+                  </Text>
+                  <Text className={`text-xl font-bold ${
+                    item.isAvailable ? 'text-gray-900' : 'text-red-700'
+                  }`}>
+                    {format(item.date, 'dd')}
+                  </Text>
+               </View>
+
+               {/* Informações */}
+               <View className="flex-1 mr-2">
+                  <Text className={`text-base font-semibold ${
+                    item.isAvailable ? 'text-gray-800' : 'text-red-800'
+                  }`}>
+                    {item.service.name}
+                  </Text>
+                  <Text className={`text-xs font-medium ${
+                    item.isAvailable ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {item.isAvailable ? 'Disponível' : 'Indisponível'}
+                  </Text>
+               </View>
+
+               {/* Switch de Ação */}
+               {saving[item.key] ? (
+                 <ActivityIndicator size="small" color="#2563eb" />
+               ) : (
+                 <Switch 
+                    value={item.isAvailable} 
+                    onValueChange={(val) => handleToggleException(item, val)}
+                    trackColor={{ false: '#ef4444', true: '#10b981' }}
+                 />
+               )}
             </View>
+          ))}
+          
+          {expandedCalendar.length === 0 && (
+             <Text className="text-center text-gray-400 mt-4">Nenhum evento neste mês.</Text>
+          )}
+        </View>
 
-            <View className="flex-row flex-wrap gap-2 justify-center">
-              {getFilteredDaysInMonth().map((date) => {
-                const dateStr = format(date, 'yyyy-MM-dd');
-                const isAvailable = getDayAvailabilityForDate(date);
-                const isSaving = saving[dateStr];
-                const dayName = format(date, 'EEE', { locale: ptBR });
-
-                return (
-                  <TouchableOpacity
-                    key={dateStr}
-                    onPress={() => handleToggleDateAvailability(date)}
-                    disabled={isSaving}
-                    className={`w-12 h-12 rounded-lg items-center justify-center ${
-                      isAvailable ? 'bg-green-500 border-green-600' : 'bg-red-500 border-red-600'
-                    } border`}
-                  >
-                    <Text className="text-white font-bold text-xs">{format(date, 'd')}</Text>
-                    <Text className="text-white font-medium text-xs capitalize">{dayName.substring(0, 3)}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            
-            <Text className="text-gray-400 text-xs text-center mt-4">
-              Toque em um dia para inverter sua disponibilidade (Exceção)
-            </Text>
-          </View>
-        )}
       </ScrollView>
     </View>
   );
