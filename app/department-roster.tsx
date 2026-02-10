@@ -20,19 +20,23 @@ export default function DepartmentRosterScreen() {
   
   const scrollViewRef = useRef<ScrollView>(null);
 
+  // Estados
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   
+  // Dados
   const [serviceDays, setServiceDays] = useState<ServiceDay[]>([]);
+  const [dayServices, setDayServices] = useState<string[]>([]);
   const [functions, setFunctions] = useState<any[]>([]);
   const [rosterEntries, setRosterEntries] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   
+  // Filtro
   const [hiddenUserIds, setHiddenUserIds] = useState<string[]>([]);
   
+  // UI States
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
-  
   const [showMemberSelect, setShowMemberSelect] = useState(false);
   const [selectedFunctionId, setSelectedFunctionId] = useState<string | null>(null);
   const [selectedFunctionName, setSelectedFunctionName] = useState<string>('');
@@ -46,7 +50,8 @@ export default function DepartmentRosterScreen() {
       setCalculating(true);
       Promise.all([
         fetchRosterForDate(selectedDate),
-        calculateHiddenUsers(selectedDate)
+        calculateHiddenUsers(selectedDate),
+        fetchDayServices(selectedDate)
       ]).finally(() => setCalculating(false));
     }
   }, [selectedDate, serviceDays, members]);
@@ -88,6 +93,25 @@ export default function DepartmentRosterScreen() {
     if (data) setServiceDays(data);
   };
 
+  const fetchDayServices = async (date: Date) => {
+    try {
+      const dayOfWeek = getDay(date);
+      const { data } = await supabase
+        .from('service_days')
+        .select('name')
+        .eq('day_of_week', dayOfWeek);
+
+      if (data) {
+        setDayServices(data.map(s => s.name));
+      } else {
+        setDayServices([]);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar serviços:', error);
+      setDayServices([]);
+    }
+  };
+
   const fetchFunctions = async () => {
     const { data } = await supabase
       .from('department_functions')
@@ -98,14 +122,16 @@ export default function DepartmentRosterScreen() {
   };
 
   const fetchMembers = async () => {
+    // ATUALIZADO: Agora busca na tabela NOVA de member_functions
     const { data } = await supabase
       .from('department_members')
       .select(`
-        id, user_id, function_id,
-        department_functions:function_id ( name ),
+        id, user_id,
+        member_functions ( function_id ), 
         profiles:user_id ( full_name, avatar_url )
       `)
       .eq('department_id', departmentId);
+      
     if (data) setMembers(data);
   };
 
@@ -122,23 +148,20 @@ export default function DepartmentRosterScreen() {
     if (data) setRosterEntries(data);
   };
 
-  // --- CÁLCULO TURBINADO COM CONFLITO DE DEPARTAMENTOS ---
   const calculateHiddenUsers = async (date: Date) => {
     try {
       const dayOfWeek = getDay(date); 
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      console.log(`\n=== CALCULANDO DISPONIBILIDADE PARA ${dateStr} ===`);
-
       const currentServiceDay = serviceDays.find(sd => sd.day_of_week === dayOfWeek);
 
-      // 1. Exceções (Membro disse "Não Posso")
+      // 1. Exceções
       const { data: exceptions } = await supabase
         .from('availability_exceptions')
         .select('user_id, is_available')
         .eq('specific_date', dateStr);
 
-      // 2. Rotinas (Regra padrão do dia)
+      // 2. Rotinas
       let routines: any[] = [];
       if (currentServiceDay) {
         const { data: routineData } = await supabase
@@ -148,9 +171,7 @@ export default function DepartmentRosterScreen() {
         routines = routineData || [];
       }
 
-      // 3. CONFLITOS REAIS (Novo!) - Já está escalado em QUALQUER departamento?
-      // Buscamos na tabela rosters qualquer escala nessa data
-      // Usamos !inner no join para pegar o user_id real da pessoa
+      // 3. Conflitos (Já escalado)
       const { data: conflicts } = await supabase
         .from('rosters')
         .select(`
@@ -159,29 +180,22 @@ export default function DepartmentRosterScreen() {
         `)
         .eq('schedule_date', dateStr);
       
-      // Criamos um Set com os IDs dos usuários que já estão trabalhando hoje
       const busyUserIds = new Set(
         conflicts?.map((c: any) => c.department_members?.user_id) || []
       );
-      
-      console.log(`Usuários já escalados hoje (em qualquer depto):`, Array.from(busyUserIds));
 
       const hiddenSet = new Set<string>();
 
       members.forEach(member => {
         const userId = member.user_id;
-        const userName = member.profiles?.full_name || 'Sem nome';
         
-        // Regra 1: Está ocupado em outro lugar?
         if (busyUserIds.has(userId)) {
-          console.log(`🚫 ${userName} escondido: Já está escalado.`);
           hiddenSet.add(userId);
-          return; // Nem precisa checar o resto, já tá ocupado
+          return;
         }
 
         let finalAvailability = true;
 
-        // Regra 2: Rotina
         if (currentServiceDay) {
           const userRoutine = routines.find(r => r.user_id === userId);
           if (userRoutine) {
@@ -189,14 +203,12 @@ export default function DepartmentRosterScreen() {
           }
         }
 
-        // Regra 3: Exceção (Ganha da Rotina)
         const userException = exceptions?.find(e => e.user_id === userId);
         if (userException) {
           finalAvailability = userException.is_available;
         }
 
         if (!finalAvailability) {
-          console.log(`🚫 ${userName} escondido: Indisponibilidade marcada.`);
           hiddenSet.add(userId);
         }
       });
@@ -208,8 +220,17 @@ export default function DepartmentRosterScreen() {
     }
   };
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/departments');
+    }
+  };
+
   const handleAddMember = async (memberId: string) => {
     if (!selectedFunctionId) return;
+
     try {
       const { error } = await supabase.from('rosters').upsert({
         department_id: departmentId,
@@ -217,10 +238,11 @@ export default function DepartmentRosterScreen() {
         member_id: memberId,
         schedule_date: format(selectedDate, 'yyyy-MM-dd')
       });
+
       if (error) throw error;
+
       setShowMemberSelect(false);
       fetchRosterForDate(selectedDate);
-      // Recalcular disponibilidade para esconder quem acabou de ser adicionado
       calculateHiddenUsers(selectedDate);
     } catch (err: any) {
       Alert.alert("Erro", err.message);
@@ -230,14 +252,20 @@ export default function DepartmentRosterScreen() {
   const handleRemoveFromRoster = async (rosterId: string) => {
     await supabase.from('rosters').delete().eq('id', rosterId);
     fetchRosterForDate(selectedDate);
-    // Recalcular para mostrar a pessoa de volta na lista
     calculateHiddenUsers(selectedDate);
   };
 
+  // --- NOVO FILTRO DE MEMBROS ---
   const filteredMembers = members.filter(member => {
-    const isCorrectFunction = member.function_id === selectedFunctionId;
+    // Verifica se a função selecionada existe na lista de funções do membro
+    const hasFunction = member.member_functions?.some(
+      (mf: any) => mf.function_id === selectedFunctionId
+    );
+    
+    // Verifica disponibilidade
     const isAvailable = !hiddenUserIds.includes(member.user_id);
-    return isCorrectFunction && isAvailable;
+    
+    return hasFunction && isAvailable;
   });
 
   const renderFunctionCard = (func: any) => {
@@ -279,11 +307,56 @@ export default function DepartmentRosterScreen() {
     );
   };
 
+  const renderModalContent = () => {
+    if (calculating) {
+      return (
+        <View className="p-10 items-center">
+          <ActivityIndicator color="#2563eb" />
+          <Text className="text-gray-400 mt-2">Verificando agenda de todos...</Text>
+        </View>
+      );
+    }
+
+    return (
+      <FlatList 
+        data={filteredMembers}
+        keyExtractor={item => item.id}
+        contentContainerStyle={{ padding: 16 }}
+        ListEmptyComponent={
+          <View className="items-center py-10 px-4">
+            <Filter size={40} color="#ccc" />
+            <Text className="text-gray-500 mt-4 text-center font-bold">Ninguém disponível</Text>
+            <Text className="text-gray-400 text-center mt-1 text-sm">
+              Todos os membros já estão escalados, indisponíveis ou não tocam {selectedFunctionName}.
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <TouchableOpacity 
+            onPress={() => handleAddMember(item.id)}
+            className="flex-row items-center p-4 mb-2 bg-white border border-gray-100 rounded-xl active:bg-blue-50 active:border-blue-200"
+          >
+            <View className="w-10 h-10 bg-blue-100 rounded-full items-center justify-center mr-3">
+              <Text className="text-blue-700 font-bold text-lg">
+                {item.profiles?.full_name?.charAt(0) || '?'}
+              </Text>
+            </View>
+            <View>
+              <Text className="text-gray-900 font-semibold text-base">
+                {item.profiles?.full_name || 'Sem nome'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+      />
+    );
+  };
+
   return (
     <View className="flex-1 bg-gray-50">
       <View className="bg-white px-4 pt-12 pb-4 border-b border-gray-200 flex-row items-center justify-between">
         <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => router.back()} className="mr-3 p-2 bg-gray-100 rounded-full">
+          <TouchableOpacity onPress={handleBack} className="mr-3 p-2 bg-gray-100 rounded-full">
             <ArrowLeft size={20} color="#374151" />
           </TouchableOpacity>
           <View>
@@ -334,6 +407,18 @@ export default function DepartmentRosterScreen() {
       </View>
 
       <ScrollView className="flex-1 p-4">
+        {/* Mostrador de Eventos do Dia */}
+        {dayServices.length > 0 && (
+          <View className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+            <Text className="text-blue-900 font-semibold text-sm mb-1">
+              Eventos do dia: {dayServices.join(', ')}
+            </Text>
+            <Text className="text-blue-700 text-xs">
+              Escalando para os serviços acima
+            </Text>
+          </View>
+        )}
+
         <Text className="text-gray-600 font-medium mb-4">
           Escala para {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
         </Text>
@@ -348,6 +433,7 @@ export default function DepartmentRosterScreen() {
         <View className="h-10" />
       </ScrollView>
 
+      {/* Bottom Sheet (Modal) */}
       <Modal
         visible={showMemberSelect}
         transparent
@@ -369,44 +455,9 @@ export default function DepartmentRosterScreen() {
               </TouchableOpacity>
             </View>
 
-            {calculating ? (
-              <View className="p-10 items-center">
-                <ActivityIndicator color="#2563eb" />
-                <Text className="text-gray-400 mt-2">Verificando agenda de todos...</Text>
-              </View>
-            ) : (
-              <FlatList 
-                data={filteredMembers}
-                keyExtractor={item => item.id}
-                contentContainerStyle={{ padding: 16 }}
-                ListEmptyComponent={
-                  <View className="items-center py-10 px-4">
-                    <Filter size={40} color="#ccc" />
-                    <Text className="text-gray-500 mt-4 text-center font-bold">Ninguém disponível</Text>
-                    <Text className="text-gray-400 text-center mt-1 text-sm">
-                      Todos os membros já estão escalados ou indisponíveis hoje.
-                    </Text>
-                  </View>
-                }
-                renderItem={({ item }) => (
-                  <TouchableOpacity 
-                    onPress={() => handleAddMember(item.id)}
-                    className="flex-row items-center p-4 mb-2 bg-white border border-gray-100 rounded-xl active:bg-blue-50 active:border-blue-200"
-                  >
-                    <View className="w-10 h-10 bg-blue-100 rounded-full items-center justify-center mr-3">
-                      <Text className="text-blue-700 font-bold text-lg">
-                        {item.profiles?.full_name?.charAt(0) || '?'}
-                      </Text>
-                    </View>
-                    <View>
-                      <Text className="text-gray-900 font-semibold text-base">
-                        {item.profiles?.full_name || 'Sem nome'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                )}
-              />
-            )}
+            {/* Conteúdo renderizado via função para evitar erro de JSX */}
+            {renderModalContent()}
+
           </View>
         </View>
       </Modal>
