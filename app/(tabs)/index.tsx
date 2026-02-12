@@ -55,21 +55,21 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
-        <Text className="text-gray-500">Carregando...</Text>
+      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center">
+        <Text className="text-gray-500 dark:text-zinc-400">Carregando...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950">
       <ScrollView className="flex-1">
         {/* Header */}
-        <View className="bg-white px-6 py-8 border-b border-gray-200">
+        <View className="bg-white dark:bg-zinc-900 px-6 py-8 border-b border-gray-200 dark:border-zinc-800">
           <View className="flex-row items-center justify-between">
             <View>
-              <Text className="text-gray-600 text-lg">Olá,</Text>
-              <Text className="text-2xl font-bold text-gray-900">{userName} 👋</Text>
+              <Text className="text-gray-600 dark:text-zinc-400 text-lg">Olá,</Text>
+              <Text className="text-2xl font-bold text-gray-900 dark:text-zinc-100">{userName} 👋</Text>
             </View>
             
             {/* Avatar clicável */}
@@ -83,7 +83,7 @@ export default function HomeScreen() {
                   className="w-12 h-12 rounded-full"
                 />
               ) : (
-                <View className="w-12 h-12 bg-gray-300 rounded-full items-center justify-center">
+                <View className="w-12 h-12 bg-gray-300 dark:bg-zinc-700 rounded-full items-center justify-center">
                   <User size={20} color="#6b7280" />
                 </View>
               )}
@@ -129,18 +129,18 @@ export default function HomeScreen() {
           </View>
 
           {/* Rodapé: Ver Departamentos */}
-          <View className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+          <View className="bg-white dark:bg-zinc-900 rounded-xl p-4 border border-gray-200 dark:border-zinc-800 shadow-sm">
             <TouchableOpacity 
               className="flex-row items-center justify-between p-3"
               onPress={() => router.push('/(tabs)/departments')}
             >
               <View className="flex-row items-center">
-                <View className="w-12 h-12 bg-blue-100 rounded-lg items-center justify-center mr-3">
+                <View className="w-12 h-12 bg-blue-100 dark:bg-blue-500/10 rounded-lg items-center justify-center mr-3">
                   <MapPin size={20} color="#2563eb" />
                 </View>
                 <View>
-                  <Text className="text-gray-900 font-semibold text-lg">Ver Departamentos</Text>
-                  <Text className="text-gray-500 text-sm">Acesse todos os seus departamentos</Text>
+                  <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-lg">Ver Departamentos</Text>
+                  <Text className="text-gray-500 dark:text-zinc-400 text-sm">Acesse todos os seus departamentos</Text>
                 </View>
               </View>
             </TouchableOpacity>

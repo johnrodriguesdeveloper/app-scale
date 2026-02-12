@@ -115,10 +115,10 @@ export default function DepartmentsScreen() {
   );
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
+    <ScrollView className="flex-1 bg-gray-50 dark:bg-zinc-950">
       <View className="p-4">
         <View className="flex-row items-center justify-between mb-4">
-          <Text className="text-2xl font-bold text-gray-900">Departamentos</Text>
+          <Text className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Departamentos</Text>
           {isMaster && (
             <TouchableOpacity
               onPress={() => router.push('/create-department')}
@@ -133,30 +133,30 @@ export default function DepartmentsScreen() {
         {loading ? (
           <View className="items-center py-8">
             <ActivityIndicator size="large" color="#3b82f6" />
-            <Text className="text-gray-500 mt-2">Carregando...</Text>
+            <Text className="text-gray-500 dark:text-zinc-400 mt-2">Carregando...</Text>
           </View>
         ) : (
           <>
             {departments.map((dept) => (
               <View
                 key={dept.id}
-                className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-200 flex-row items-center justify-between"
+                className="bg-white dark:bg-zinc-900 rounded-xl p-4 mb-4 shadow-sm border border-gray-200 dark:border-zinc-800 flex-row items-center justify-between"
               >
                 <TouchableOpacity
                   onPress={() => router.push(`/(tabs)/departments/${dept.id}`)}
                   className="flex-1 pr-3"
                 >
                   <View>
-                    <Text className="text-lg font-semibold text-gray-900">
+                    <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">
                       {dept.name}
                     </Text>
                     {dept.description && (
-                      <Text className="text-gray-600 text-sm mt-1">{dept.description}</Text>
+                      <Text className="text-gray-600 dark:text-zinc-400 text-sm mt-1">{dept.description}</Text>
                     )}
                     {isLeader[dept.id] && (
                       <View className="flex-row items-center mt-2">
                         <Users size={16} color="#3b82f6" />
-                        <Text className="text-blue-600 text-sm ml-1">Você é líder</Text>
+                        <Text className="text-blue-600 dark:text-blue-400 text-sm ml-1">Você é líder</Text>
                       </View>
                     )}
                   </View>

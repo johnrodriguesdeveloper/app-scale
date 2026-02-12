@@ -165,23 +165,23 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 bg-gray-50 items-center justify-center">
+      <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center">
         <ActivityIndicator size="large" color="#4f46e5" />
-        <Text className="text-gray-500 mt-2">Carregando...</Text>
+        <Text className="text-gray-500 dark:text-zinc-400 mt-2">Carregando...</Text>
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-gray-50">
+    <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
       {/* Header */}
-      <View className="bg-white border-b border-gray-200 px-4 py-4">
+      <View className="bg-white dark:bg-zinc-900 px-4 pt-12 pb-4 border-b border-gray-200 dark:border-zinc-800">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity onPress={() => router.back()} className="p-2 rounded-lg bg-gray-100">
             <ArrowLeft size={20} color="#374151" />
           </TouchableOpacity>
           
-          <Text className="text-xl font-bold text-gray-900">Meu Perfil</Text>
+          <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Meu Perfil</Text>
           
           <TouchableOpacity onPress={handleLogout} className="p-2 rounded-lg bg-red-50">
             <LogOut size={20} color="#ef4444" />
@@ -203,8 +203,8 @@ export default function ProfileScreen() {
                 className="w-24 h-24 rounded-full"
               />
             ) : (
-              <View className="w-24 h-24 bg-gray-300 rounded-full items-center justify-center">
-                <Text className="text-2xl font-bold text-gray-600">
+              <View className="w-24 h-24 bg-gray-300 dark:bg-zinc-700 rounded-full items-center justify-center">
+                <Text className="text-2xl font-bold text-gray-600 dark:text-zinc-300">
                   {profile?.full_name ? getInitials(profile.full_name) : 'U'}
                 </Text>
               </View>
@@ -226,16 +226,16 @@ export default function ProfileScreen() {
         </View>
 
         {/* Formulário de Dados */}
-        <View className="bg-white rounded-xl p-4 border border-gray-200">
-          <Text className="text-gray-900 font-semibold text-lg mb-4">Dados Pessoais</Text>
+        <View className="bg-white dark:bg-zinc-900 rounded-xl p-4 border border-gray-200 dark:border-zinc-800">
+          <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-lg mb-4">Dados Pessoais</Text>
           
           <View className="mb-4">
-            <Text className="text-gray-700 text-sm font-medium mb-2">Nome Completo</Text>
+            <Text className="text-gray-700 dark:text-zinc-300 text-sm font-medium mb-2">Nome Completo</Text>
             <TextInput
               value={editingName}
               onChangeText={setEditingName}
               placeholder="Seu nome completo"
-              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 bg-gray-50"
+              className="border border-gray-300 dark:border-zinc-700 rounded-lg px-4 py-3 text-gray-900 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800"
             />
           </View>
 
@@ -248,18 +248,18 @@ export default function ProfileScreen() {
         </View>
 
         {/* Informações da Conta */}
-        <View className="bg-white rounded-xl p-4 border border-gray-200 mt-4">
-          <Text className="text-gray-900 font-semibold text-lg mb-4">Informações da Conta</Text>
+        <View className="bg-white dark:bg-zinc-900 rounded-xl p-4 border border-gray-200 dark:border-zinc-800 mt-4">
+          <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-lg mb-4">Informações da Conta</Text>
           
           <View className="space-y-3">
             <View className="flex-row justify-between">
-              <Text className="text-gray-600">Status</Text>
-              <Text className="text-green-600 font-medium">Ativo</Text>
+              <Text className="text-gray-600 dark:text-zinc-400">Status</Text>
+              <Text className="text-green-600 dark:text-green-400 font-medium">Ativo</Text>
             </View>
             
             <View className="flex-row justify-between">
-              <Text className="text-gray-600">Membro desde</Text>
-              <Text className="text-gray-900 font-medium">
+              <Text className="text-gray-600 dark:text-zinc-400">Membro desde</Text>
+              <Text className="text-gray-900 dark:text-zinc-100 font-medium">
                 {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
               </Text>
             </View>

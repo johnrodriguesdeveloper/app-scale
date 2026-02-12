@@ -49,7 +49,6 @@ export default function SignUpScreen() {
         break;
       case 'password':
         newErrors.password = validatePassword(value);
-        // Revalidar confirmPassword se já tiver valor
         if (confirmPassword) {
           newErrors.confirmPassword = confirmPassword === value ? '' : 'As senhas não coincidem';
         }
@@ -78,7 +77,6 @@ export default function SignUpScreen() {
   };
 
   const handleSignUp = async () => {
-    // Validar todos os campos antes de enviar
     validateField('fullName', fullName);
     validateField('email', email);
     validateField('password', password);
@@ -123,17 +121,18 @@ export default function SignUpScreen() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-blue-50">
+    // Fundo ajustado para Zinc Dark
+    <ScrollView className="flex-1 bg-gray-50 dark:bg-zinc-950">
       <View className="flex-1 justify-center px-6 py-12">
         {/* Header */}
         <View className="items-center mb-8">
-          <View className="bg-blue-600 rounded-full p-4 mb-4">
+          <View className="bg-blue-600 rounded-full p-4 mb-4 shadow-lg shadow-blue-900/20">
             <UserPlus size={32} color="white" />
           </View>
-          <Text className="text-3xl font-bold text-gray-900 mb-2">
+          <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-100 mb-2">
             Criar Conta
           </Text>
-          <Text className="text-gray-600 text-center">
+          <Text className="text-gray-600 dark:text-zinc-400 text-center">
             Preencha os dados para começar
           </Text>
         </View>
@@ -142,10 +141,10 @@ export default function SignUpScreen() {
         <View>
           {/* Full Name Input */}
           <View className="mb-4">
-            <View className="flex-row items-center bg-white rounded-lg border border-gray-200 px-4 py-3 shadow-sm">
-              <User size={20} color="#6b7280" style={{ marginRight: 12 }} />
+            <View className="flex-row items-center bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
+              <User size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                className="flex-1 text-gray-900 text-base"
+                className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
                 placeholder="Nome Completo"
                 placeholderTextColor="#9ca3af"
                 value={fullName}
@@ -164,10 +163,10 @@ export default function SignUpScreen() {
 
           {/* Email Input */}
           <View className="mb-4">
-            <View className="flex-row items-center bg-white rounded-lg border border-gray-200 px-4 py-3 shadow-sm">
-              <Mail size={20} color="#6b7280" style={{ marginRight: 12 }} />
+            <View className="flex-row items-center bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
+              <Mail size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                className="flex-1 text-gray-900 text-base"
+                className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
                 placeholder="Email"
                 placeholderTextColor="#9ca3af"
                 value={email}
@@ -188,21 +187,17 @@ export default function SignUpScreen() {
 
           {/* Password Input */}
           <View className="mb-4">
-            <View className="flex-row items-center bg-white rounded-lg border border-gray-200 px-4 py-3 shadow-sm">
-              <Lock size={20} color="#6b7280" style={{ marginRight: 12 }} />
+            <View className="flex-row items-center bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
+              <Lock size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                className="flex-1 text-gray-900 text-base"
+                className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
                 placeholder="Senha"
                 placeholderTextColor="#9ca3af"
                 value={password}
                 onChangeText={(text) => {
-                  const newPassword = text;
-                  setPassword(newPassword);
-                  validateField('password', newPassword);
-                  // Revalidar confirmPassword com o novo password
-                  if (confirmPassword) {
-                    validateField('confirmPassword', confirmPassword, newPassword);
-                  }
+                  setPassword(text);
+                  validateField('password', text);
+                  if (confirmPassword) validateField('confirmPassword', confirmPassword, text);
                 }}
                 secureTextEntry
                 autoCapitalize="none"
@@ -217,10 +212,10 @@ export default function SignUpScreen() {
 
           {/* Confirm Password Input */}
           <View className="mb-6">
-            <View className="flex-row items-center bg-white rounded-lg border border-gray-200 px-4 py-3 shadow-sm">
-              <Lock size={20} color="#6b7280" style={{ marginRight: 12 }} />
+            <View className="flex-row items-center bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
+              <Lock size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                className="flex-1 text-gray-900 text-base"
+                className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
                 placeholder="Confirmar Senha"
                 placeholderTextColor="#9ca3af"
                 value={confirmPassword}
@@ -243,7 +238,7 @@ export default function SignUpScreen() {
           <TouchableOpacity
             onPress={handleSignUp}
             disabled={loading || !isFormValid()}
-            className="bg-blue-600 rounded-lg py-4 px-6 shadow-lg mb-4"
+            className="bg-blue-600 rounded-lg py-4 px-6 shadow-lg mb-4 active:bg-blue-700"
             style={{ opacity: loading || !isFormValid() ? 0.5 : 1 }}
           >
             {loading ? (
@@ -262,10 +257,10 @@ export default function SignUpScreen() {
           <TouchableOpacity
             onPress={() => router.push('/login')}
             disabled={loading}
-            className="flex-row items-center justify-center"
+            className="flex-row items-center justify-center py-2"
           >
-            <ArrowLeft size={16} color="#2563eb" style={{ marginRight: 8 }} />
-            <Text className="text-blue-600 font-medium text-base">
+            <ArrowLeft size={16} className="text-blue-600 dark:text-blue-400 mr-2" />
+            <Text className="text-blue-600 dark:text-blue-400 font-medium text-base">
               Já tenho conta? Entrar
             </Text>
           </TouchableOpacity>

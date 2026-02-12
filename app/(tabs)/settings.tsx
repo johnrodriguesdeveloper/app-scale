@@ -1,106 +1,105 @@
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
-import { LogOut, User, Calendar } from 'lucide-react-native';
+import { View, Text, Switch, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { useColorScheme } from 'nativewind';
+import { Moon, Sun, User, Bell, ChevronRight, LogOut, Palette } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'expo-router';
 
 export default function SettingsScreen() {
+  const { colorScheme, toggleColorScheme, setColorScheme } = useColorScheme();
   const router = useRouter();
-  const [profile, setProfile] = useState<any>(null);
 
-  useEffect(() => {
-    async function loadProfile() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+  // Garante que sabemos se está dark
+  const isDark = colorScheme === 'dark';
 
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.replace('/(auth)/login');
+  }
 
-      if (data) {
-        setProfile(data);
-      }
-    }
-
-    loadProfile();
-  }, []);
-
-  const handleLogout = async () => {
-    Alert.alert('Confirmar', 'Deseja realmente sair?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Sair',
-        style: 'destructive',
-        onPress: async () => {
-          await supabase.auth.signOut();
-          router.replace('/login');
-        },
-      },
-    ]);
+  // Função para forçar o Dark Mode se o usuário quiser "Padrão Dark"
+  // (Dica: O app geralmente lembra a última escolha)
+  const handleToggle = () => {
+    toggleColorScheme();
   };
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
-      <View className="p-4">
-        <Text className="text-2xl font-bold text-gray-900 mb-4">Configurações</Text>
+    // MUDANÇA: bg-zinc-950 é aquele preto "profundo" bonito
+    <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
+      
+      {/* Header */}
+      <View className="bg-white dark:bg-zinc-900 px-4 pt-12 pb-4 border-b border-gray-200 dark:border-zinc-800">
+        <Text className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Configurações</Text>
+      </View>
 
-        {/* Perfil */}
-        <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-200">
-          <View className="flex-row items-center mb-4">
-            <User size={24} color="#374151" />
-            <Text className="text-lg font-semibold text-gray-900 ml-3">Perfil</Text>
-          </View>
-          {profile && (
-            <>
-              <View className="mb-2">
-                <Text className="text-sm text-gray-500">Nome</Text>
-                <Text className="text-gray-900 font-medium">
-                  {profile.full_name || 'Não informado'}
-                </Text>
-              </View>
-              <View className="mb-2">
-                <Text className="text-sm text-gray-500">Email</Text>
-                <Text className="text-gray-900 font-medium">
-                  {profile.email || 'Não informado'}
-                </Text>
+      <ScrollView className="flex-1 p-4">
+        
+        {/* Seção Aparência */}
+        <Text className="text-xs font-bold text-gray-500 dark:text-zinc-500 uppercase mb-3 mt-2 tracking-wider">Aparência</Text>
+        <View className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden shadow-sm">
+          <View className="flex-row items-center justify-between p-4">
+            <View className="flex-row items-center">
+              <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${isDark ? 'bg-indigo-500/10' : 'bg-orange-100'}`}>
+                {isDark ? (
+                  <Moon size={20} className="text-indigo-400" />
+                ) : (
+                  <Sun size={20} className="text-orange-500" />
+                )}
               </View>
               <View>
-                <Text className="text-sm text-gray-500">Função</Text>
-                <Text className="text-gray-900 font-medium">
-                  {profile.org_role === 'master'
-                    ? 'Master'
-                    : profile.org_role === 'admin'
-                      ? 'Administrador'
-                      : 'Membro'}
+                <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-lg">Modo Escuro</Text>
+                <Text className="text-gray-500 dark:text-zinc-400 text-xs">
+                  {isDark ? 'Visual focado (Zinc)' : 'Visual claro padrão'}
                 </Text>
               </View>
-            </>
-          )}
+            </View>
+            
+            <Switch 
+              value={isDark} 
+              onValueChange={handleToggle} 
+              trackColor={{ false: "#e5e7eb", true: "#6366f1" }} // Indigo para destacar no dark
+              thumbColor={isDark ? "#ffffff" : "#f4f3f4"}
+            />
+          </View>
         </View>
 
-        {/* Agenda da Igreja */}
-        <TouchableOpacity
-          onPress={() => router.push('/(tabs)/settings/schedule')}
-          className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-200"
-        >
-          <View className="flex-row items-center">
-            <Calendar size={24} color="#3b82f6" />
-            <Text className="text-lg font-semibold text-gray-900 ml-3">Agenda da Igreja</Text>
-          </View>
-          <Text className="text-gray-500 text-sm mt-2">Gerenciar dias de culto e eventos</Text>
-        </TouchableOpacity>
+        {/* Seção Conta */}
+        <Text className="text-xs font-bold text-gray-500 dark:text-zinc-500 uppercase mb-3 mt-8 tracking-wider">Conta</Text>
+        <View className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden shadow-sm">
+          
+          <TouchableOpacity onPress={() => router.push('/profile')} className="flex-row items-center justify-between p-4 border-b border-gray-100 dark:border-zinc-800">
+            <View className="flex-row items-center">
+              <View className="w-9 h-9 bg-blue-50 dark:bg-blue-500/10 rounded-full items-center justify-center mr-3">
+                <User size={18} className="text-blue-600 dark:text-blue-400" />
+              </View>
+              <Text className="text-gray-700 dark:text-zinc-200 font-medium">Editar Perfil</Text>
+            </View>
+            <ChevronRight size={20} className="text-gray-300 dark:text-zinc-600" />
+          </TouchableOpacity>
 
-        {/* Sair */}
-        <TouchableOpacity
-          onPress={handleLogout}
-          className="bg-red-500 rounded-xl p-4 flex-row items-center justify-center"
-        >
-          <LogOut size={20} color="white" />
-          <Text className="text-white font-semibold text-lg ml-2">Sair</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+          <TouchableOpacity className="flex-row items-center justify-between p-4 border-b border-gray-100 dark:border-zinc-800">
+            <View className="flex-row items-center">
+              <View className="w-9 h-9 bg-green-50 dark:bg-green-500/10 rounded-full items-center justify-center mr-3">
+                <Bell size={18} className="text-green-600 dark:text-green-400" />
+              </View>
+              <Text className="text-gray-700 dark:text-zinc-200 font-medium">Notificações</Text>
+            </View>
+            <Switch value={true} trackColor={{ false: "#767577", true: "#22c55e" }} />
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={handleSignOut} className="flex-row items-center justify-between p-4 active:bg-red-50 dark:active:bg-red-900/10">
+             <View className="flex-row items-center">
+              <View className="w-9 h-9 bg-red-50 dark:bg-red-500/10 rounded-full items-center justify-center mr-3">
+                <LogOut size={18} className="text-red-600 dark:text-red-400" />
+              </View>
+              <Text className="text-red-600 dark:text-red-400 font-medium">Sair do App</Text>
+            </View>
+          </TouchableOpacity>
+
+        </View>
+
+        <Text className="text-center text-gray-400 dark:text-zinc-600 text-xs mt-10">Versão 1.0.0</Text>
+
+      </ScrollView>
+    </View>
   );
 }

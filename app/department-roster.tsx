@@ -272,22 +272,22 @@ export default function DepartmentRosterScreen() {
     const entry = rosterEntries.find(e => e.function_id === func.id);
 
     return (
-      <View key={func.id} className="bg-white p-4 rounded-xl border border-gray-100 mb-3 shadow-sm flex-row items-center justify-between">
+      <View key={func.id} className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-gray-100 dark:border-zinc-800 mb-3 shadow-sm flex-row items-center justify-between">
         <View>
-          <Text className="text-gray-500 text-xs uppercase font-bold tracking-wider mb-1">{func.name}</Text>
+          <Text className="text-gray-500 dark:text-zinc-400 text-xs uppercase font-bold tracking-wider mb-1">{func.name}</Text>
           {entry ? (
-            <Text className="text-gray-900 font-semibold text-lg">
+            <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-lg">
               {entry.department_members?.profiles?.full_name || 'Usuário'}
             </Text>
           ) : (
-            <Text className="text-gray-400 italic">Vago</Text>
+            <Text className="text-gray-400 dark:text-zinc-600 italic">Vago</Text>
           )}
         </View>
 
         {entry ? (
           <TouchableOpacity 
             onPress={() => handleRemoveFromRoster(entry.id)}
-            className="w-10 h-10 bg-red-50 rounded-full items-center justify-center"
+            className="w-10 h-10 bg-red-50 dark:bg-red-500/10 rounded-full items-center justify-center"
           >
             <Trash2 size={18} color="#ef4444" />
           </TouchableOpacity>
@@ -312,7 +312,7 @@ export default function DepartmentRosterScreen() {
       return (
         <View className="p-10 items-center">
           <ActivityIndicator color="#2563eb" />
-          <Text className="text-gray-400 mt-2">Verificando agenda de todos...</Text>
+          <Text className="text-gray-400 dark:text-zinc-600 mt-2">Verificando agenda de todos...</Text>
         </View>
       );
     }
@@ -325,8 +325,8 @@ export default function DepartmentRosterScreen() {
         ListEmptyComponent={
           <View className="items-center py-10 px-4">
             <Filter size={40} color="#ccc" />
-            <Text className="text-gray-500 mt-4 text-center font-bold">Ninguém disponível</Text>
-            <Text className="text-gray-400 text-center mt-1 text-sm">
+            <Text className="text-gray-500 dark:text-zinc-400 mt-4 text-center font-bold">Ninguém disponível</Text>
+            <Text className="text-gray-400 dark:text-zinc-600 text-center mt-1 text-sm">
               Todos os membros já estão escalados, indisponíveis ou não tocam {selectedFunctionName}.
             </Text>
           </View>
@@ -334,15 +334,15 @@ export default function DepartmentRosterScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity 
             onPress={() => handleAddMember(item.id)}
-            className="flex-row items-center p-4 mb-2 bg-white border border-gray-100 rounded-xl active:bg-blue-50 active:border-blue-200"
+            className="flex-row items-center p-4 mb-2 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-xl active:bg-blue-50 dark:active:bg-blue-900/20 active:border-blue-200 dark:active:border-blue-700"
           >
-            <View className="w-10 h-10 bg-blue-100 rounded-full items-center justify-center mr-3">
-              <Text className="text-blue-700 font-bold text-lg">
+            <View className="w-10 h-10 bg-blue-100 dark:bg-blue-500/10 rounded-full items-center justify-center mr-3">
+              <Text className="text-blue-700 dark:text-blue-400 font-bold text-lg">
                 {item.profiles?.full_name?.charAt(0) || '?'}
               </Text>
             </View>
             <View>
-              <Text className="text-gray-900 font-semibold text-base">
+              <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-base">
                 {item.profiles?.full_name || 'Sem nome'}
               </Text>
             </View>
@@ -353,24 +353,24 @@ export default function DepartmentRosterScreen() {
   };
 
   return (
-    <View className="flex-1 bg-gray-50">
-      <View className="bg-white px-4 pt-12 pb-4 border-b border-gray-200 flex-row items-center justify-between">
+    <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
+      <View className="bg-white dark:bg-zinc-900 px-4 pt-12 pb-4 border-b border-gray-200 dark:border-zinc-800 flex-row items-center justify-between">
         <View className="flex-row items-center">
           <TouchableOpacity onPress={handleBack} className="mr-3 p-2 bg-gray-100 rounded-full">
             <ArrowLeft size={20} color="#374151" />
           </TouchableOpacity>
           <View>
-            <Text className="text-xl font-bold text-gray-900">{departmentName}</Text>
-            <Text className="text-xs text-gray-500">Gerenciar Escala</Text>
+            <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">{departmentName}</Text>
+            <Text className="text-xs text-gray-500 dark:text-zinc-400">Gerenciar Escala</Text>
           </View>
         </View>
       </View>
 
-      <View className="flex-row items-center justify-between px-6 py-4 bg-white border-b border-gray-100">
+      <View className="flex-row items-center justify-between px-6 py-4 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800">
         <TouchableOpacity onPress={() => setCurrentDate(subMonths(currentDate, 1))}>
           <ChevronLeft size={24} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-bold text-gray-800 capitalize">
+        <Text className="text-lg font-bold text-gray-800 dark:text-zinc-200 capitalize">
           {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
         </Text>
         <TouchableOpacity onPress={() => setCurrentDate(addMonths(currentDate, 1))}>
@@ -378,7 +378,7 @@ export default function DepartmentRosterScreen() {
         </TouchableOpacity>
       </View>
 
-      <View className="bg-white pb-4">
+      <View className="bg-white dark:bg-zinc-900 pb-4">
         <ScrollView 
           ref={scrollViewRef}
           horizontal 
@@ -391,12 +391,12 @@ export default function DepartmentRosterScreen() {
               <TouchableOpacity 
                 key={index}
                 onPress={() => setSelectedDate(day)}
-                className={`items-center justify-center w-14 h-16 rounded-xl mr-3 ${isSelected ? 'bg-blue-600' : 'bg-gray-100'}`}
+                className={`items-center justify-center w-14 h-16 rounded-xl mr-3 ${isSelected ? 'bg-blue-600' : 'bg-gray-100 dark:bg-zinc-800'}`}
               >
-                <Text className={`text-xs mb-1 font-medium capitalize ${isSelected ? 'text-blue-200' : 'text-gray-500'}`}>
+                <Text className={`text-xs mb-1 font-medium capitalize ${isSelected ? 'text-blue-200' : 'text-gray-500 dark:text-zinc-400'}`}>
                   {format(day, 'EEE', { locale: ptBR }).replace('.', '')}
                 </Text>
-                <Text className={`text-lg font-bold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                <Text className={`text-lg font-bold ${isSelected ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}>
                   {format(day, 'd')}
                 </Text>
               </TouchableOpacity>
@@ -409,17 +409,17 @@ export default function DepartmentRosterScreen() {
       <ScrollView className="flex-1 p-4">
         {/* Mostrador de Eventos do Dia */}
         {dayServices.length > 0 && (
-          <View className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
-            <Text className="text-blue-900 font-semibold text-sm mb-1">
+          <View className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-3 mb-4">
+            <Text className="text-blue-900 dark:text-blue-100 font-semibold text-sm mb-1">
               Eventos do dia: {dayServices.join(', ')}
             </Text>
-            <Text className="text-blue-700 text-xs">
+            <Text className="text-blue-700 dark:text-blue-300 text-xs">
               Escalando para os serviços acima
             </Text>
           </View>
         )}
 
-        <Text className="text-gray-600 font-medium mb-4">
+        <Text className="text-gray-600 dark:text-zinc-400 font-medium mb-4">
           Escala para {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
         </Text>
         
@@ -428,7 +428,7 @@ export default function DepartmentRosterScreen() {
         ) : functions.length > 0 ? (
           functions.map(renderFunctionCard)
         ) : (
-          <Text className="text-center text-gray-400 mt-10">Nenhuma função cadastrada.</Text>
+          <Text className="text-center text-gray-400 dark:text-zinc-600 mt-10">Nenhuma função cadastrada.</Text>
         )}
         <View className="h-10" />
       </ScrollView>
@@ -441,16 +441,16 @@ export default function DepartmentRosterScreen() {
         onRequestClose={() => setShowMemberSelect(false)}
       >
         <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl h-[60%] w-full flex overflow-hidden">
+          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl h-[60%] w-full flex overflow-hidden">
             
-            <View className="p-4 border-b border-gray-100 flex-row justify-between items-center bg-gray-50">
+            <View className="p-4 border-b border-gray-100 dark:border-zinc-800 flex-row justify-between items-center bg-gray-50 dark:bg-zinc-800">
               <View>
-                <Text className="text-lg font-bold text-gray-800">Selecionar: {selectedFunctionName}</Text>
-                <Text className="text-xs text-gray-500">
+                <Text className="text-lg font-bold text-gray-800 dark:text-zinc-200">Selecionar: {selectedFunctionName}</Text>
+                <Text className="text-xs text-gray-500 dark:text-zinc-400">
                   {calculating ? 'Calculando disponibilidade...' : 'Exibindo apenas membros disponíveis'}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowMemberSelect(false)} className="p-2 bg-white rounded-full">
+              <TouchableOpacity onPress={() => setShowMemberSelect(false)} className="p-2 bg-white dark:bg-zinc-700 rounded-full">
                 <X size={20} color="#666" />
               </TouchableOpacity>
             </View>
