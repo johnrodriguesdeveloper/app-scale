@@ -87,28 +87,28 @@ export default function MyScalesScreen() {
     };
 
     return (
-      <View key={scale.id} className="bg-white p-4 rounded-xl border border-gray-100 mb-3 shadow-sm">
+      <View key={scale.id} className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-gray-100 dark:border-zinc-800 mb-3 shadow-sm">
         <View className="flex-row items-center">
           {/* Data à esquerda */}
-          <View className="bg-blue-50 rounded-lg p-3 mr-4 items-center min-w-[60px]">
+          <View className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 mr-4 items-center min-w-[60px]">
             <Text className="text-2xl font-bold text-blue-600">{day}</Text>
             <Text className="text-xs text-blue-500">{month}</Text>
           </View>
 
           {/* Informações à direita */}
           <View className="flex-1">
-            <Text className="text-gray-900 font-bold text-lg mb-1">
+            <Text className="text-gray-900 dark:text-zinc-100 font-bold text-lg mb-1">
              Função: {getFunctionName() || 'Função não definida'}
             </Text>
             
             <View className="flex-row items-center mb-1">
               <MapPin size={14} color="#6b7280" className="mr-1" />
-              <Text className="text-gray-600 text-sm">
+              <Text className="text-gray-600 dark:text-zinc-400 text-sm">
                 Departamento: {getDepartmentName() || 'Departamento'}
               </Text>
             </View>
             
-            <Text className="text-gray-500 text-xs capitalize">
+            <Text className="text-gray-500 dark:text-zinc-600 text-xs capitalize">
               {weekday}
             </Text>
           </View>
@@ -119,38 +119,39 @@ export default function MyScalesScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 bg-gray-50 items-center justify-center">
+      <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center">
         <ActivityIndicator size="large" color="#2563eb" />
-        <Text className="text-gray-500 mt-2">Carregando...</Text>
+        <Text className="text-gray-500 dark:text-zinc-400 mt-2">Carregando...</Text>
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-gray-50">
-      <View className="bg-white px-4 pt-12 pb-4 border-b border-gray-200">
+    <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
+      {/* Header */}
+      <View className="bg-white dark:bg-zinc-900 px-4 pt-12 pb-4 border-b border-gray-200 dark:border-zinc-800">
         <View className="flex-row items-center">
           <TouchableOpacity onPress={() => router.back()} className="mr-3 p-2 bg-gray-100 rounded-full">
             <ArrowLeft size={20} color="#374151" />
           </TouchableOpacity>
-          <Text className="text-xl font-bold text-gray-900">Minhas Escalas</Text>
+          <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Minhas Escalas</Text>
         </View>
       </View>
 
       <ScrollView className="flex-1 p-4">
         {scales.length > 0 ? (
           <>
-            <Text className="text-gray-600 font-medium mb-4">
+            <Text className="text-gray-600 dark:text-zinc-400 font-medium mb-4">
               {scales.length} escala{ scales.length > 1 ? 's' : '' } agendada{ scales.length > 1 ? 's' : '' }
             </Text>
             {scales.map(renderScaleCard)}
           </>
         ) : (
           <View className="items-center justify-center py-20">
-            <View className="w-20 h-20 bg-gray-100 rounded-full items-center justify-center mb-4">
+            <View className="w-20 h-20 bg-gray-100 dark:bg-zinc-800 rounded-full items-center justify-center mb-4">
               <Calendar size={32} color="#9ca3af" />
             </View>
-            <Text className="text-gray-900 font-bold text-lg mb-2">Nenhuma escala agendada</Text>
+            <Text className="text-gray-900 dark:text-zinc-100 font-bold text-lg mb-2">Nenhuma escala agendada</Text>
             <Text className="text-gray-500 text-center text-sm">
               Você não tem escalas agendadas para os próximos dias.
             </Text>

@@ -136,6 +136,11 @@ export default function MemberListScreen() {
     } catch (e) { console.error(e); }
   };
 
+  // Filtra perfis disponíveis com base no texto de busca
+  const filteredProfiles = availableProfiles.filter(profile => 
+    profile.full_name.toLowerCase().includes(searchText.toLowerCase())
+  );
+
   const loadAvailableFunctions = async () => {
     if (!id) return;
     try {
@@ -235,19 +240,19 @@ export default function MemberListScreen() {
     const hasMoreFunctions = (item.member_functions?.length || 0) < availableFunctions.length;
 
     return (
-      <View className="bg-white rounded-xl shadow-sm border border-gray-200 mx-4 mb-3">
-        <View className="p-4">
-          
-          <View className="flex-row items-center justify-between mb-3">
-            <View className="flex-row items-center flex-1">
-              <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
-                 <Text className="text-blue-600 font-bold">{item.profiles.full_name?.charAt(0).toUpperCase()}</Text>
+      <View className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800 mx-4 mb-3">
+          <View className="p-4">
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-row items-center flex-1">
+                <View className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-500/10 items-center justify-center mr-3">
+                  <Text className="text-blue-600 dark:text-blue-400 font-bold">{item.profiles.full_name?.charAt(0).toUpperCase()}</Text>
               </View>
               <View>
-                <Text className="text-gray-900 font-bold text-base">{item.profiles?.full_name}</Text>
+                <Text className="text-gray-900 dark:text-zinc-100 font-bold text-base">{item.profiles?.full_name}</Text>
                 {item.is_leader && (
-                    <View className="bg-amber-100 px-2 py-0.5 rounded-md self-start mt-0.5 flex-row items-center">
+                    <View className="bg-amber-100 dark:bg-amber-500/10 px-2 py-0.5 rounded-md self-start mt-0.5 flex-row items-center">
                         <ShieldCheck size={10} color="#b45309" className="mr-1"/>
+                        <Text className="text-amber-800 dark:text-amber-400 text-[10px] font-bold">LÍDER</Text>
                         <Text className="text-amber-800 text-[10px] font-bold">LÍDER</Text>
                     </View>
                 )}
@@ -297,54 +302,101 @@ export default function MemberListScreen() {
     : availableFunctions;
 
   return (
-    <View className="flex-1 bg-gray-50">
-      <FlatList data={members} renderItem={renderMember} keyExtractor={i => i.id} contentContainerStyle={{paddingVertical:16}} 
-        ListEmptyComponent={<Text className="text-center text-gray-400 mt-10">Nenhum membro.</Text>}
+    <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
+      <FlatList 
+        data={members} 
+        renderItem={renderMember} 
+        keyExtractor={i => i.id} 
+        contentContainerStyle={{paddingVertical:16}} 
+        ListEmptyComponent={<Text className="text-center text-gray-400 dark:text-zinc-600 mt-10">Nenhum membro.</Text>}
       />
       
       {canEdit && (
-        <TouchableOpacity onPress={openAddModal} className="absolute bottom-6 right-6 bg-blue-600 w-14 h-14 rounded-full items-center justify-center shadow-lg">
+        <TouchableOpacity 
+          onPress={openAddModal} 
+          className="absolute bottom-6 right-6 bg-blue-600 w-14 h-14 rounded-full items-center justify-center shadow-lg"
+        >
           <Plus size={24} color="white" />
         </TouchableOpacity>
       )}
 
-      <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
-         <View className="flex-1 bg-black/50 justify-end">
-            <View className="bg-white rounded-t-3xl p-6 h-[70%]">
-               <Text className="text-xl font-bold mb-4">{modalMode === 'add' ? 'Adicionar Membro' : 'Adicionar Função'}</Text>
-               
-               {modalMode === 'add' && (
-                 <View className="mb-4">
-                   <Text className="mb-2 font-bold">Pessoa</Text>
-                   <TextInput value={searchText} onChangeText={setSearchText} placeholder="Buscar..." className="bg-gray-100 p-3 rounded-lg mb-2"/>
-                   <FlatList data={availableProfiles.filter(p=>p.full_name.toLowerCase().includes(searchText.toLowerCase()))} 
-                     renderItem={({item}) => (
-                       <TouchableOpacity onPress={() => setSelectedProfile(item)} className={`p-3 rounded mb-1 ${selectedProfile?.id === item.id ? 'bg-blue-100 border-blue-500 border': 'bg-gray-50'}`}>
-                         <Text>{item.full_name}</Text>
-                       </TouchableOpacity>
-                     )}
-                   />
-                 </View>
-               )}
+      {/* Modal */}
+      <Modal visible={showModal} transparent animationType="slide">
+        <View className="flex-1 bg-black/50 justify-end">
+          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6">
+            <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 mb-4">
+              {modalMode === 'add' ? 'Adicionar Membro' : 'Editar Membro'}
+            </Text>
 
-               <Text className="mb-2 font-bold">Função</Text>
-               <FlatList data={functionsToShow} 
-                 renderItem={({item}) => (
-                   <TouchableOpacity onPress={() => setSelectedFunction(item)} className={`p-3 rounded mb-1 ${selectedFunction?.id === item.id ? 'bg-blue-100 border-blue-500 border': 'bg-gray-50'}`}>
-                     <Text>{item.name}</Text>
-                   </TouchableOpacity>
-                 )}
-                 ListEmptyComponent={<Text className="text-gray-400 italic text-center">Nenhuma função disponível.</Text>}
-               />
-
-               <TouchableOpacity onPress={handleSaveMember} disabled={saving} className="bg-blue-600 p-4 rounded-xl mt-4">
-                 {saving ? <ActivityIndicator color="#FFF"/> : <Text className="text-white text-center font-bold">Salvar</Text>}
-               </TouchableOpacity>
-               <TouchableOpacity onPress={() => setShowModal(false)} className="p-4 mt-2">
-                 <Text className="text-gray-500 text-center">Cancelar</Text>
-               </TouchableOpacity>
+            <View className="mb-4">
+              <Text className="mb-2 font-bold text-gray-700 dark:text-zinc-300">Nome</Text>
+              <TextInput
+                value={searchText}
+                onChangeText={setSearchText}
+                placeholder="Buscar usuário..."
+                className="border border-gray-300 dark:border-zinc-700 rounded-lg p-3 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100"
+              />
             </View>
-         </View>
+
+            {searchText.length > 1 && (
+              <View className="mb-4">
+                <Text className="mb-2 font-bold text-gray-700 dark:text-zinc-300">Selecione o perfil</Text>
+                <FlatList 
+                  data={filteredProfiles} 
+                  renderItem={({item}) => (
+                    <TouchableOpacity 
+                      onPress={() => setSelectedProfile(item)} 
+                      className={`p-3 rounded mb-1 ${
+                        selectedProfile?.id === item.id 
+                          ? 'bg-blue-100 dark:bg-blue-900/20 border-blue-500 dark:border-blue-400 border' 
+                          : 'bg-gray-50 dark:bg-zinc-800'
+                      }`}
+                    >
+                      <Text className="text-gray-900 dark:text-zinc-100">{item.full_name}</Text>
+                    </TouchableOpacity>
+                  )}
+                  ListEmptyComponent={<Text className="text-gray-400 dark:text-zinc-600 italic text-center">Nenhum perfil encontrado.</Text>}
+                />
+              </View>
+            )}
+
+            {selectedProfile && (
+              <View className="mb-4">
+                <Text className="mb-2 font-bold text-gray-700 dark:text-zinc-300">Função</Text>
+                <FlatList 
+                  data={functionsToShow} 
+                  renderItem={({item}) => (
+                    <TouchableOpacity 
+                      onPress={() => setSelectedFunction(item)} 
+                      className={`p-3 rounded mb-1 ${
+                        selectedFunction?.id === item.id 
+                          ? 'bg-blue-100 dark:bg-blue-900/20 border-blue-500 dark:border-blue-400 border' 
+                          : 'bg-gray-50 dark:bg-zinc-800'
+                      }`}
+                    >
+                      <Text className="text-gray-900 dark:text-zinc-100">{item.name}</Text>
+                    </TouchableOpacity>
+                  )}
+                  ListEmptyComponent={<Text className="text-gray-400 dark:text-zinc-600 italic text-center">Nenhuma função disponível.</Text>}
+                />
+              </View>
+            )}
+
+            <TouchableOpacity 
+              onPress={handleSaveMember} 
+              disabled={saving} 
+              className="bg-blue-600 p-4 rounded-xl mt-4"
+            >
+              {saving ? <ActivityIndicator color="#FFF"/> : <Text className="text-white text-center font-bold">Salvar</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setShowModal(false)} 
+              className="p-4 mt-2"
+            >
+              <Text className="text-gray-500 dark:text-zinc-400 text-center">Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );

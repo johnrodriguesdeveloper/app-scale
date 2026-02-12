@@ -4,10 +4,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { View, Text, ActivityIndicator } from 'react-native';
+import { useColorScheme } from 'nativewind';
 
 export default function TabLayout() {
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(true);
+  const { colorScheme } = useColorScheme();
+  
+  const isDark = colorScheme === 'dark';
 
   useFocusEffect(
     useCallback(() => {
@@ -60,9 +64,9 @@ export default function TabLayout() {
 
   if (isChecking) {
     return (
-      <View className="flex-1 bg-gray-50 items-center justify-center">
+      <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center">
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text className="text-gray-500 mt-2">Verificando...</Text>
+        <Text className="text-gray-500 dark:text-zinc-400 mt-2">Verificando...</Text>
       </View>
     );
   }
@@ -70,8 +74,13 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#3b82f6',
+        tabBarActiveTintColor: '#3b82f6', // Azul padrão
+        tabBarInactiveTintColor: isDark ? '#a1a1aa' : '#6b7280', // Zinc-400 vs Gray-500
         headerShown: false,
+        tabBarStyle: {
+          backgroundColor: isDark ? '#18181b' : '#ffffff', // Zinc-900 vs White
+          borderTopColor: isDark ? '#27272a' : '#e5e7eb', // Zinc-800 vs Gray-200
+        }
       }}
     >
       <Tabs.Screen

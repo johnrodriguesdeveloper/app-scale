@@ -199,8 +199,8 @@ Este projeto é privado e proprietário.
 - [ x ] **Bug:** Domingo de EBD não está aparecendo no calendário
 
 ### 🧱 Bloco 4: Lógica Avançada
-- [ ] Permitir mais de uma função por membro (N:N)
-- [ ] Implementar lógica de Equipes para o Depto. Infantil
+- [ X ] Permitir mais de uma função por membro (N:N)
+- [ X ] Implementar lógica de Equipes para o Depto. Infantil
 
 ### 🧱 Bloco 5: UI/UX (Visual)
 - [ ] Melhorar UI Geral (Cores, espaçamentos)
