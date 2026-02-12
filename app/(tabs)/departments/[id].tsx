@@ -3,11 +3,17 @@ import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash, Calendar, Shield } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-
+import { useColorScheme } from 'nativewind'; // <--- Importante para ícones dinâmicos
 
 export default function DepartmentDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { colorScheme } = useColorScheme(); // Hook para saber se é dark
+  
+  // Cores dinâmicas para ícones
+  const iconColor = colorScheme === 'dark' ? '#e4e4e7' : '#374151'; // Zinc-200 vs Gray-700
+  const placeholderColor = colorScheme === 'dark' ? '#a1a1aa' : '#9ca3af';
+
   const [department, setDepartment] = useState<any>(null);
   const [parentDepartment, setParentDepartment] = useState<any>(null);
   const [subDepartments, setSubDepartments] = useState<any[]>([]);
@@ -123,9 +129,6 @@ export default function DepartmentDetailsScreen() {
 
       if (error) {
         console.error('ERRO AO BUSCAR DEPARTAMENTO:', error);
-        console.log('ID Recebido:', id);
-      } else {
-        console.log('Departamento encontrado:', dept);
       }
 
       if (dept) {
@@ -287,10 +290,7 @@ export default function DepartmentDetailsScreen() {
               return;
             }
 
-            // Atualização instantânea para feedback visual
             setSubDepartments((prev) => prev.filter((sub) => sub.id !== subDeptId));
-            
-            // Recarregar do servidor para garantir sincronia
             await fetchSubDepartments(String(id));
           },
         },
@@ -321,10 +321,7 @@ export default function DepartmentDetailsScreen() {
               return;
             }
 
-            // Atualização instantânea para feedback visual
             setFunctions((prev) => prev.filter((func) => func.id !== funcId));
-            
-            // Recarregar do servidor para garantir sincronia
             await fetchFunctions(String(id));
           },
         },
@@ -375,7 +372,7 @@ export default function DepartmentDetailsScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 bg-gray-50 items-center justify-center">
+      <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center">
         <ActivityIndicator size="large" color="#3b82f6" />
       </View>
     );
@@ -383,8 +380,8 @@ export default function DepartmentDetailsScreen() {
 
   if (!department) {
     return (
-      <View className="flex-1 bg-gray-50 items-center justify-center p-4">
-        <Text className="text-gray-500 text-center">Departamento não encontrado</Text>
+      <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center p-4">
+        <Text className="text-gray-500 dark:text-zinc-400 text-center">Departamento não encontrado</Text>
         <TouchableOpacity
           onPress={() => router.back()}
           className="mt-4 bg-blue-600 rounded-lg px-6 py-3"
@@ -397,9 +394,9 @@ export default function DepartmentDetailsScreen() {
 
   return (
     <>
-      <ScrollView className="flex-1 bg-gray-50">
+      <ScrollView className="flex-1 bg-gray-50 dark:bg-zinc-950">
         {/* Header */}
-        <View className="bg-white border-b border-gray-200 px-4 py-3 flex-row items-center">
+        <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 py-3 flex-row items-center">
           <TouchableOpacity
             onPress={() => {
               if (router.canGoBack()) {
@@ -410,12 +407,12 @@ export default function DepartmentDetailsScreen() {
             }}
             className="mr-4"
           >
-            <ArrowLeft size={24} color="#374151" />
+            <ArrowLeft size={24} color={iconColor} />
           </TouchableOpacity>
           <View className="flex-1">
-            <Text className="text-xl font-bold text-gray-900">{department.name}</Text>
+            <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">{department.name}</Text>
             {department.description && (
-              <Text className="text-gray-600 text-sm mt-1">{department.description}</Text>
+              <Text className="text-gray-600 dark:text-zinc-400 text-sm mt-1">{department.description}</Text>
             )}
             {department.parent_id && parentDepartment?.name && (
               <TouchableOpacity
@@ -427,7 +424,7 @@ export default function DepartmentDetailsScreen() {
                 }
                 className="flex-row items-center mt-1"
               >
-                <Text className="text-gray-500 text-sm">{parentDepartment.name}</Text>
+                <Text className="text-gray-500 dark:text-zinc-500 text-sm">{parentDepartment.name}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -436,7 +433,7 @@ export default function DepartmentDetailsScreen() {
             {(isAdmin || isMaster) && (
               <TouchableOpacity
                 onPress={() => router.push({
-                  pathname: '/department-leaders', // Nova rota na raiz
+                  pathname: '/department-leaders',
                   params: { 
                     departmentId: String(id),
                     departmentName: department?.name || 'Departamento'
@@ -473,7 +470,7 @@ export default function DepartmentDetailsScreen() {
               <View className="flex-row items-center justify-between mb-4">
                 <View className="flex-row items-center">
                   <Folder size={20} color="#4f46e5" style={{ marginRight: 8 }} />
-                  <Text className="text-lg font-semibold text-gray-900">Sub-departamentos</Text>
+                  <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">Sub-departamentos</Text>
                 </View>
                 {isAdmin && (
                   <TouchableOpacity
@@ -491,7 +488,8 @@ export default function DepartmentDetailsScreen() {
                   {subDepartments.map((child, index) => (
                     <View
                       key={child.id}
-                      className={`bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex-row items-center ${index !== subDepartments.length - 1 ? 'mb-3' : ''}`}
+                      // Ajustado para fundo indigo bem suave no dark
+                      className={`bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 flex-row items-center ${index !== subDepartments.length - 1 ? 'mb-3' : ''}`}
                     >
                       <TouchableOpacity
                         onPress={() =>
@@ -502,13 +500,13 @@ export default function DepartmentDetailsScreen() {
                         }
                         className="flex-1 flex-row items-center"
                       >
-                        <View className="w-10 h-10 rounded-full bg-indigo-100 items-center justify-center mr-3">
+                        <View className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 items-center justify-center mr-3">
                           <Folder size={20} color="#4f46e5" />
                         </View>
                         <View className="flex-1">
-                          <Text className="text-gray-900 font-semibold">{child.name}</Text>
+                          <Text className="text-gray-900 dark:text-zinc-100 font-semibold">{child.name}</Text>
                           {child.description && (
-                            <Text className="text-indigo-700 text-sm mt-1">{child.description}</Text>
+                            <Text className="text-indigo-700 dark:text-indigo-300 text-sm mt-1">{child.description}</Text>
                           )}
                         </View>
                       </TouchableOpacity>
@@ -524,9 +522,9 @@ export default function DepartmentDetailsScreen() {
                 ))}
               </View>
             ) : (
-              <View className="bg-white rounded-xl p-6 items-center border border-gray-200">
-                <Folder size={32} color="#9ca3af" />
-                <Text className="text-gray-500 mt-2">Nenhum sub-departamento encontrado</Text>
+              <View className="bg-white dark:bg-zinc-900 rounded-xl p-6 items-center border border-gray-200 dark:border-zinc-800">
+                <Folder size={32} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
+                <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhum sub-departamento encontrado</Text>
                 {isAdmin && (
                   <TouchableOpacity
                     onPress={() => setShowSubDepartmentModal(true)}
@@ -551,38 +549,38 @@ export default function DepartmentDetailsScreen() {
             >
               <View className="flex-row items-center">
                 <Users size={20} color="#3b82f6" style={{ marginRight: 8 }} />
-                <Text className="text-lg font-semibold text-gray-900">Membros</Text>
+                <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">Membros</Text>
               </View>
               <View className="flex-row items-center">
-                <Text className="text-gray-500 text-sm mr-2">{members.length} membro(s)</Text>
-                <Text className="text-blue-600 text-sm">Ver Lista Completa →</Text>
+                <Text className="text-gray-500 dark:text-zinc-400 text-sm mr-2">{members.length} membro(s)</Text>
+                <Text className="text-blue-600 dark:text-blue-400 text-sm">Ver Lista Completa →</Text>
               </View>
             </TouchableOpacity>
 
             {members.length > 0 ? (
-              <View className="bg-white rounded-xl shadow-sm border border-gray-200">
+              <View className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800">
                 {members.map((member, index) => (
                   <View
                     key={member.user_id}
-                    className={`p-4 ${index !== members.length - 1 ? 'border-b border-gray-100' : ''}`}
+                    className={`p-4 ${index !== members.length - 1 ? 'border-b border-gray-100 dark:border-zinc-800' : ''}`}
                   >
                     <View className="flex-row items-center">
                       {member.profiles?.avatar_url ? (
-                        <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
-                          <Text className="text-blue-600 font-semibold">
+                        <View className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 items-center justify-center mr-3">
+                          <Text className="text-blue-600 dark:text-blue-400 font-semibold">
                             {member.profiles.full_name?.charAt(0).toUpperCase() || 'U'}
                           </Text>
                         </View>
                       ) : (
-                        <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
+                        <View className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 items-center justify-center mr-3">
                           <User size={20} color="#3b82f6" />
                         </View>
                       )}
                       <View className="flex-1">
-                        <Text className="text-gray-900 font-medium">
+                        <Text className="text-gray-900 dark:text-zinc-100 font-medium">
                           {member.profiles?.full_name || member.profiles?.email || 'Sem nome'}
                         </Text>
-                        <Text className="text-gray-500 text-sm mt-1">
+                        <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-1">
                           {member.dept_role === 'leader' ? 'Líder' : 'Membro'}
                         </Text>
                       </View>
@@ -591,9 +589,9 @@ export default function DepartmentDetailsScreen() {
                 ))}
               </View>
             ) : (
-              <View className="bg-white rounded-xl p-6 items-center border border-gray-200">
-                <Users size={32} color="#9ca3af" />
-                <Text className="text-gray-500 mt-2">Nenhum membro encontrado</Text>
+              <View className="bg-white dark:bg-zinc-900 rounded-xl p-6 items-center border border-gray-200 dark:border-zinc-800">
+                <Users size={32} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
+                <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhum membro encontrado</Text>
               </View>
             )}
           </View>
@@ -603,7 +601,7 @@ export default function DepartmentDetailsScreen() {
             <View className="flex-row items-center justify-between mb-4">
               <View className="flex-row items-center">
                 <Briefcase size={20} color="#3b82f6" style={{ marginRight: 8 }} />
-                <Text className="text-lg font-semibold text-gray-900">Funções</Text>
+                <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">Funções</Text>
               </View>
               {isAdmin && (
                 <TouchableOpacity
@@ -617,17 +615,17 @@ export default function DepartmentDetailsScreen() {
             </View>
 
             {functions.length > 0 ? (
-              <View className="bg-white rounded-xl shadow-sm border border-gray-200">
+              <View className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800">
                 {functions.map((func, index) => (
                   <View
                     key={func.id}
-                    className={`p-4 ${index !== functions.length - 1 ? 'border-b border-gray-100' : ''}`}
+                    className={`p-4 ${index !== functions.length - 1 ? 'border-b border-gray-100 dark:border-zinc-800' : ''}`}
                   >
                     <View className="flex-row items-center">
                       <View className="flex-1">
-                        <Text className="text-gray-900 font-medium">{func.name}</Text>
+                        <Text className="text-gray-900 dark:text-zinc-100 font-medium">{func.name}</Text>
                         {func.description && (
-                          <Text className="text-gray-500 text-sm mt-1">{func.description}</Text>
+                          <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-1">{func.description}</Text>
                         )}
                       </View>
                       {isAdmin && (
@@ -643,9 +641,9 @@ export default function DepartmentDetailsScreen() {
                 ))}
               </View>
             ) : (
-              <View className="bg-white rounded-xl p-6 items-center border border-gray-200">
-                <Briefcase size={32} color="#9ca3af" />
-                <Text className="text-gray-500 mt-2">Nenhuma função cadastrada</Text>
+              <View className="bg-white dark:bg-zinc-900 rounded-xl p-6 items-center border border-gray-200 dark:border-zinc-800">
+                <Briefcase size={32} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
+                <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhuma função cadastrada</Text>
                 {isAdmin && (
                   <TouchableOpacity
                     onPress={() => setShowModal(true)}
@@ -668,27 +666,27 @@ export default function DepartmentDetailsScreen() {
         onRequestClose={() => setShowSubDepartmentModal(false)}
       >
         <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
+          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6">
             <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-xl font-bold text-gray-900">Novo Sub-departamento</Text>
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Novo Sub-departamento</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowSubDepartmentModal(false);
                   setNewSubDepartmentName('');
                 }}
               >
-                <Text className="text-gray-500 text-lg">✕</Text>
+                <Text className="text-gray-500 dark:text-zinc-400 text-lg">✕</Text>
               </TouchableOpacity>
             </View>
 
             <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-700 mb-2">
+              <Text className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
                 Nome do Sub-departamento
               </Text>
               <TextInput
-                className="bg-gray-50 rounded-lg border border-gray-200 px-4 py-3 text-gray-900 text-base"
+                className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 text-base"
                 placeholder="Ex: Louvor, Infantil, Administrativo..."
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={placeholderColor}
                 value={newSubDepartmentName}
                 onChangeText={setNewSubDepartmentName}
                 editable={!savingSubDepartment}
@@ -713,9 +711,9 @@ export default function DepartmentDetailsScreen() {
                 setShowSubDepartmentModal(false);
                 setNewSubDepartmentName('');
               }}
-              className="bg-gray-100 rounded-lg py-4 px-6"
+              className="bg-gray-100 dark:bg-zinc-800 rounded-lg py-4 px-6"
             >
-              <Text className="text-gray-700 font-semibold text-center">Cancelar</Text>
+              <Text className="text-gray-700 dark:text-zinc-300 font-semibold text-center">Cancelar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -729,27 +727,27 @@ export default function DepartmentDetailsScreen() {
         onRequestClose={() => setShowModal(false)}
       >
         <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
+          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6">
             <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-xl font-bold text-gray-900">Nova Função</Text>
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Nova Função</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowModal(false);
                   setNewFunctionName('');
                 }}
               >
-                <Text className="text-gray-500 text-lg">✕</Text>
+                <Text className="text-gray-500 dark:text-zinc-400 text-lg">✕</Text>
               </TouchableOpacity>
             </View>
 
             <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-700 mb-2">
+              <Text className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
                 Nome da Função
               </Text>
               <TextInput
-                className="bg-gray-50 rounded-lg border border-gray-200 px-4 py-3 text-gray-900 text-base"
+                className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 text-base"
                 placeholder="Ex: Guitarrista, Professor, Monitor..."
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={placeholderColor}
                 value={newFunctionName}
                 onChangeText={setNewFunctionName}
                 editable={!savingFunction}
@@ -774,9 +772,9 @@ export default function DepartmentDetailsScreen() {
                 setShowModal(false);
                 setNewFunctionName('');
               }}
-              className="bg-gray-100 rounded-lg py-4 px-6"
+              className="bg-gray-100 dark:bg-zinc-800 rounded-lg py-4 px-6"
             >
-              <Text className="text-gray-700 font-semibold text-center">Cancelar</Text>
+              <Text className="text-gray-700 dark:text-zinc-300 font-semibold text-center">Cancelar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -790,13 +788,13 @@ export default function DepartmentDetailsScreen() {
         onRequestClose={() => setShowMembersModal(false)}
       >
         <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6 max-h-[80%]">
+          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6 max-h-[80%]">
             <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-xl font-bold text-gray-900">Membros do Departamento</Text>
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Membros do Departamento</Text>
               <TouchableOpacity
                 onPress={() => setShowMembersModal(false)}
               >
-                <Text className="text-gray-500 text-lg">✕</Text>
+                <Text className="text-gray-500 dark:text-zinc-400 text-lg">✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -806,25 +804,25 @@ export default function DepartmentDetailsScreen() {
                   {members.map((member) => (
                     <View
                       key={member.id}
-                      className="flex-row items-center justify-between p-4 border-b border-gray-100"
+                      className="flex-row items-center justify-between p-4 border-b border-gray-100 dark:border-zinc-800"
                     >
                       <View className="flex-row items-center flex-1">
                         {member.profiles?.avatar_url ? (
-                          <View className="w-12 h-12 rounded-full bg-blue-100 items-center justify-center mr-3">
-                            <Text className="text-blue-600 font-semibold text-lg">
+                          <View className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 items-center justify-center mr-3">
+                            <Text className="text-blue-600 dark:text-blue-400 font-semibold text-lg">
                               {member.profiles.full_name?.charAt(0).toUpperCase() || 'U'}
                             </Text>
                           </View>
                         ) : (
-                          <View className="w-12 h-12 rounded-full bg-gray-200 items-center justify-center mr-3">
-                            <User size={20} color="#6b7280" />
+                          <View className="w-12 h-12 rounded-full bg-gray-200 dark:bg-zinc-700 items-center justify-center mr-3">
+                            <User size={20} color={colorScheme === 'dark' ? '#d4d4d8' : '#6b7280'} />
                           </View>
                         )}
                         <View className="flex-1">
-                          <Text className="text-gray-900 font-semibold">
+                          <Text className="text-gray-900 dark:text-zinc-100 font-semibold">
                             {member.profiles?.full_name || 'Usuário sem nome'}
                           </Text>
-                          <Text className="text-gray-500 text-sm">
+                          <Text className="text-gray-500 dark:text-zinc-400 text-sm">
                             {member.department_functions?.name || 'Sem função definida'}
                           </Text>
                         </View>
@@ -842,8 +840,8 @@ export default function DepartmentDetailsScreen() {
                 </View>
               ) : (
                 <View className="flex-1 items-center justify-center py-8">
-                  <User size={48} color="#9ca3af" />
-                  <Text className="text-gray-500 mt-4 text-center">
+                  <User size={48} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
+                  <Text className="text-gray-500 dark:text-zinc-400 mt-4 text-center">
                     Nenhum membro encontrado neste departamento
                   </Text>
                 </View>

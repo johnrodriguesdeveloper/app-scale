@@ -3,12 +3,12 @@ import { useColorScheme } from 'nativewind';
 import { Moon, Sun, User, Bell, ChevronRight, LogOut, Palette } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // <--- Importante
 
 export default function SettingsScreen() {
-  const { colorScheme, toggleColorScheme, setColorScheme } = useColorScheme();
+  const { colorScheme, setColorScheme } = useColorScheme(); // Usamos setColorScheme direto agora
   const router = useRouter();
 
-  // Garante que sabemos se está dark
   const isDark = colorScheme === 'dark';
 
   async function handleSignOut() {
@@ -16,14 +16,22 @@ export default function SettingsScreen() {
     router.replace('/(auth)/login');
   }
 
-  // Função para forçar o Dark Mode se o usuário quiser "Padrão Dark"
-  // (Dica: O app geralmente lembra a última escolha)
-  const handleToggle = () => {
-    toggleColorScheme();
+  // --- NOVA FUNÇÃO DE TOGGLE COM SAVE ---
+  const handleToggle = async () => {
+    const newTheme = isDark ? 'light' : 'dark'; // Inverte o atual
+    
+    // 1. Aplica visualmente agora
+    setColorScheme(newTheme);
+    
+    // 2. Salva na memória do celular/navegador para sempre
+    try {
+      await AsyncStorage.setItem('user-theme', newTheme);
+    } catch (e) {
+      console.error("Erro ao salvar tema", e);
+    }
   };
 
   return (
-    // MUDANÇA: bg-zinc-950 é aquele preto "profundo" bonito
     <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
       
       {/* Header */}
@@ -56,7 +64,7 @@ export default function SettingsScreen() {
             <Switch 
               value={isDark} 
               onValueChange={handleToggle} 
-              trackColor={{ false: "#e5e7eb", true: "#6366f1" }} // Indigo para destacar no dark
+              trackColor={{ false: "#e5e7eb", true: "#6366f1" }}
               thumbColor={isDark ? "#ffffff" : "#f4f3f4"}
             />
           </View>
