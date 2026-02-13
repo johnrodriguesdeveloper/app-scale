@@ -67,9 +67,9 @@ export default function HomeScreen() {
         {/* Header */}
         <View className="bg-white dark:bg-zinc-900 px-6 py-8 border-b border-gray-200 dark:border-zinc-800">
           <View className="flex-row items-center justify-between">
-            <View>
+            <View className='flex-row items-center'>
               <Text className="text-gray-600 dark:text-zinc-400 text-lg">Olá,</Text>
-              <Text className="text-2xl font-bold text-gray-900 dark:text-zinc-100">{userName} 👋</Text>
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">{''} {userName} 👋</Text>
             </View>
             
             {/* Avatar clicável */}
