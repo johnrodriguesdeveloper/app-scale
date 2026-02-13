@@ -29,7 +29,7 @@ export interface Database {
           id: string;
           user_id: string;
           organization_id: string;
-          org_role: 'admin' | 'member';
+          org_role: 'master' | 'admin' | 'member';
           full_name: string | null;
           email: string | null;
           phone: string | null;
@@ -41,7 +41,7 @@ export interface Database {
           id?: string;
           user_id: string;
           organization_id: string;
-          org_role: 'admin' | 'member';
+          org_role: 'master' | 'admin' | 'member';
           full_name?: string | null;
           email?: string | null;
           phone?: string | null;
@@ -53,7 +53,7 @@ export interface Database {
           id?: string;
           user_id?: string;
           organization_id?: string;
-          org_role?: 'admin' | 'member';
+          org_role?: 'master' | 'admin' | 'member';
           full_name?: string | null;
           email?: string | null;
           phone?: string | null;

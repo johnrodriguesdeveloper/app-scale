@@ -93,7 +93,7 @@ export async function getUpcomingRosters(
     .limit(limit);
 
   if (error) {
-    console.error('Erro ao buscar próximas escalas:', error);
+    
     throw new Error(`Erro ao buscar próximas escalas: ${error.message}`);
   }
 

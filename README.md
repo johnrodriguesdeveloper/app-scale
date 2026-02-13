@@ -183,3 +183,28 @@ const members = await getAvailableMembersByFunction(
 ## 📄 Licença
 
 Este projeto é privado e proprietário.
+
+
+
+## 🗺️ Roadmap & To-Do
+
+### 🧱 Bloco 1: Segurança & Integridade
+> Prioridade Máxima: Garantir que as regras de negócio sejam respeitadas no banco.
+- [ x ] Configurar RLS no Supabase para impedir delete/insert de escalas por não-líderes
+
+### 🧱 Bloco 2: Identidade do Usuário
+- [ x ] Criar fluxo de Upload de Avatar (Foto do perfil)
+
+### 🧱 Bloco 3: Refinamento & Bugs (Fixes)
+- [ x ] **Bug:** Domingo de EBD não está aparecendo no calendário
+
+### 🧱 Bloco 4: Lógica Avançada
+- [ X ] Permitir mais de uma função por membro (N:N)
+- [ X ] Implementar lógica de Equipes para o Depto. Infantil
+
+### 🧱 Bloco 5: UI/UX (Visual)
+- [ ] Melhorar UI Geral (Cores, espaçamentos)
+- [ ] Criar componente de Header padronizado e melhorado
+
+### 🧱 Bloco 6: Documentação
+- [ ] Criar `README_AI.md` com contexto do banco e regras para facilitar o desenvolvimento com IA

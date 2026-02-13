@@ -1,14 +1,77 @@
 import { Tabs } from 'expo-router';
 import { Calendar, Home, Settings, Users } from 'lucide-react-native';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import { View, Text, ActivityIndicator } from 'react-native';
+import { useColorScheme } from 'nativewind';
 
 export default function TabLayout() {
+  const router = useRouter();
+  const [isChecking, setIsChecking] = useState(true);
+  const { colorScheme } = useColorScheme();
+  
+  const isDark = colorScheme === 'dark';
+
+  useFocusEffect(
+    useCallback(() => {
+      checkUserDepartment();
+    }, [])
+  );
+
+  const checkUserDepartment = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setIsChecking(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('department_members')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (error) {
+        setIsChecking(false);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        setIsChecking(false);
+        router.replace('/onboarding');
+      } else {
+        setIsChecking(false);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar departamento:', error);
+      setIsChecking(false);
+    }
+  };
+
+  if (isChecking) {
+    return (
+      <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center">
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <Text className="text-gray-500 dark:text-zinc-400 mt-2">Verificando...</Text>
+      </View>
+    );
+  }
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#3b82f6',
+        tabBarActiveTintColor: '#3b82f6', // Azul padrão
+        tabBarInactiveTintColor: isDark ? '#a1a1aa' : '#6b7280', // Zinc-400 vs Gray-500
         headerShown: false,
+        tabBarStyle: {
+          backgroundColor: isDark ? '#18181b' : '#ffffff', // Zinc-900 vs White
+          borderTopColor: isDark ? '#27272a' : '#e5e7eb', // Zinc-800 vs Gray-200
+        }
       }}
     >
+      {/* 1. HOME */}
       <Tabs.Screen
         name="index"
         options={{
@@ -16,13 +79,17 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
         }}
       />
+
+      {/* 2. AGENDA (Antigo Calendário) */}
       <Tabs.Screen
-        name="calendar"
+        name="my-scales"
         options={{
-          title: 'Calendário',
+          title: 'Agenda', // <--- Mudamos o nome aqui
           tabBarIcon: ({ color, size }) => <Calendar size={size} color={color} />,
         }}
       />
+
+      {/* 3. DEPARTAMENTOS */}
       <Tabs.Screen
         name="departments"
         options={{
@@ -30,6 +97,29 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
         }}
       />
+
+      {/* --- TELAS OCULTAS (Não aparecem na barra, mas precisam estar aqui para funcionar) --- */}
+      <Tabs.Screen
+        name="departments/[id]"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="departments/member-list"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="settings/schedule"
+        options={{
+          href: null,
+        }}
+      />
+      {/* ---------------------------------------------------------------------------------- */}
+
+      {/* 4. CONFIGURAÇÕES (Último item) */}
       <Tabs.Screen
         name="settings"
         options={{

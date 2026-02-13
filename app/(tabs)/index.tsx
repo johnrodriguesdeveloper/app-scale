@@ -1,175 +1,124 @@
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
-import { Calendar, AlertCircle } from 'lucide-react-native';
+import { View, Text, ScrollView, TouchableOpacity, SafeAreaView, Image } from 'react-native';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Calendar, Clock, MapPin, User, ChevronRight } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { getUpcomingRosters } from '@/services/rosterService';
-import { useDeadlineCheck } from '@/hooks/useDeadlineCheck';
 
-export default function DashboardScreen() {
+export default function HomeScreen() {
   const router = useRouter();
-  const [upcomingRosters, setUpcomingRosters] = useState<any[]>([]);
+  const [userName, setUserName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [organizationId, setOrganizationId] = useState<string | null>(null);
-  const [departmentId, setDepartmentId] = useState<string | null>(null);
 
-  // Buscar organização e departamento do usuário
-  useEffect(() => {
-    async function loadUserData() {
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserData();
+    }, [])
+  );
+
+  const fetchUserData = async () => {
+    try {
+      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('organization_id')
+        .select('full_name, avatar_url')
         .eq('user_id', user.id)
         .single();
 
       if (profile) {
-        setOrganizationId(profile.organization_id);
-
-        // Buscar primeiro departamento do usuário
-        const { data: deptMember } = await supabase
-          .from('department_members')
-          .select('department_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .single();
-
-        if (deptMember) {
-          setDepartmentId(deptMember.department_id);
-        }
+        setUserName(profile.full_name?.split(' ')[0] || 'Membro');
+        setAvatarUrl(profile.avatar_url);
       }
+    } catch (error) {
+      console.error('Erro ao buscar dados do usuário:', error);
+    } finally {
+      setLoading(false);
     }
-
-    loadUserData();
-  }, []);
-
-  // Verificar deadline
-  const deadlineCheck = useDeadlineCheck(departmentId, organizationId);
-
-  // Buscar próximas escalas
-  useEffect(() => {
-    async function loadRosters() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !organizationId) return;
-
-      try {
-        const rosters = await getUpcomingRosters(user.id, organizationId, 5);
-        setUpcomingRosters(rosters || []);
-      } catch (error) {
-        console.error('Erro ao carregar escalas:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    if (organizationId) {
-      loadRosters();
-    }
-  }, [organizationId]);
-
-  const nextRoster = upcomingRosters[0];
+  };
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
-      <View className="p-4">
-        {/* Card Principal: Próxima Escala */}
-        {nextRoster && (
-          <View className="bg-white rounded-xl p-6 mb-4 shadow-sm border border-gray-200">
-            <Text className="text-sm text-gray-500 mb-2">Sua próxima escala</Text>
-            <Text className="text-2xl font-bold text-gray-900 mb-1">
-              {new Date(nextRoster.date).toLocaleDateString('pt-BR', {
-                day: 'numeric',
-                month: 'short',
-              })}
-            </Text>
-            <Text className="text-lg text-gray-700">
-              {nextRoster.function?.name} ({nextRoster.department?.name})
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950">
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }}>
+        
+        {/* Header Ultra Limpo */}
+        <View className="px-6 pt-10 pb-4 flex-row justify-between items-start mb-4 border-b border-gray-200 dark:border-zinc-800">
+          <View className="flex-row items-center">
+            <Text className="text-gray-500 dark:text-zinc-400 text-base font-medium">Olá,</Text>
+            <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 tracking-tight">
+              {''} {userName} 👋
             </Text>
           </View>
-        )}
-
-        {/* Widget de Calendário Semanal */}
-        <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-200">
-          <Text className="text-lg font-semibold text-gray-900 mb-4">
-            Calendário Semanal
-          </Text>
-          <View className="flex-row justify-between">
-            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day, index) => {
-              const hasRoster = upcomingRosters.some(
-                (r) => new Date(r.date).getDay() === index
-              );
-              return (
-                <View key={day} className="items-center">
-                  <Text className="text-xs text-gray-500 mb-2">{day}</Text>
-                  <View
-                    className={`w-8 h-8 rounded-full ${
-                      hasRoster ? 'bg-blue-500' : 'bg-gray-200'
-                    }`}
-                  />
-                </View>
-              );
-            })}
-          </View>
+          
+          <TouchableOpacity 
+            onPress={() => router.push('/profile')}
+            className="rounded-full shadow-sm"
+          >
+            {avatarUrl ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                className="w-12 h-12 rounded-full border border-gray-200 dark:border-zinc-800"
+              />
+            ) : (
+              <View className="w-12 h-12 bg-gray-200 dark:bg-zinc-800 rounded-full items-center justify-center">
+                <User size={24} className="text-gray-500 dark:text-zinc-500" />
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
 
-        {/* Botão de Ação Rápida */}
-        {deadlineCheck.canEdit && (
-          <TouchableOpacity
-            onPress={() => router.push('/availability')}
-            className="bg-blue-500 rounded-xl p-4 mb-4"
+        {/* Lista de Ações */}
+        <View className="px-6 gap-4">
+          
+          {/* 1. AGENDA */}
+          <TouchableOpacity 
+            onPress={() => router.push('/my-scales')}
+            className="flex-row items-center bg-white dark:bg-zinc-900 p-5 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-sm active:bg-gray-50 dark:active:bg-zinc-800 transition-all"
           >
-            <View className="flex-row items-center justify-center">
-              <Calendar size={20} color="white" className="mr-2" />
-              <Text className="text-white font-semibold text-lg">
-                Informar Disponibilidade
-              </Text>
+            <View className="w-14 h-14 bg-blue-50 dark:bg-blue-500/10 rounded-2xl items-center justify-center mr-5">
+              <Calendar size={26} className="text-blue-600 dark:text-blue-400" />
             </View>
+            <View className="flex-1">
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Minha Agenda</Text>
+              <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-0.5">Veja suas escalas</Text>
+            </View>
+            <ChevronRight size={20} className="text-gray-300 dark:text-zinc-600" />
           </TouchableOpacity>
-        )}
 
-        {deadlineCheck.isPastDeadline && (
-          <View className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
-            <View className="flex-row items-center">
-              <AlertCircle size={20} color="#f59e0b" className="mr-2" />
-              <Text className="text-yellow-800 flex-1">
-                O prazo para informar disponibilidade encerrou. Aguarde o próximo mês.
-              </Text>
+          {/* 2. DISPONIBILIDADE */}
+          <TouchableOpacity 
+            onPress={() => router.push('/availability')}
+            className="flex-row items-center bg-white dark:bg-zinc-900 p-5 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-sm active:bg-gray-50 dark:active:bg-zinc-800 transition-all"
+          >
+            <View className="w-14 h-14 bg-orange-50 dark:bg-orange-500/10 rounded-2xl items-center justify-center mr-5">
+              <Clock size={26} className="text-orange-500 dark:text-orange-400" />
             </View>
-          </View>
-        )}
+            <View className="flex-1">
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Disponibilidade</Text>
+              <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-0.5">Informe ausências</Text>
+            </View>
+            <ChevronRight size={20} className="text-gray-300 dark:text-zinc-600" />
+          </TouchableOpacity>
 
-        {/* Lista de Próximas Escalas */}
-        {upcomingRosters.length > 0 && (
-          <View className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-            <Text className="text-lg font-semibold text-gray-900 mb-4">
-              Próximas Escalas
-            </Text>
-            {upcomingRosters.map((roster) => (
-              <View
-                key={roster.id}
-                className="flex-row items-center justify-between py-3 border-b border-gray-100 last:border-b-0"
-              >
-                <View className="flex-1">
-                  <Text className="text-gray-900 font-medium">
-                    {new Date(roster.date).toLocaleDateString('pt-BR')}
-                  </Text>
-                  <Text className="text-gray-600 text-sm">
-                    {roster.function?.name} - {roster.department?.name}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
+          {/* 3. DEPARTAMENTOS */}
+          <TouchableOpacity 
+            onPress={() => router.push('/(tabs)/departments')}
+            className="flex-row items-center bg-white dark:bg-zinc-900 p-5 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-sm active:bg-gray-50 dark:active:bg-zinc-800 transition-all"
+          >
+            <View className="w-14 h-14 bg-zinc-100 dark:bg-zinc-800 rounded-2xl items-center justify-center mr-5">
+              <MapPin size={26} className="text-gray-700 dark:text-zinc-300" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Departamentos</Text>
+              <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-0.5">Gerencie seus grupos</Text>
+            </View>
+            <ChevronRight size={20} className="text-gray-300 dark:text-zinc-600" />
+          </TouchableOpacity>
 
-        {loading && (
-          <View className="items-center py-8">
-            <Text className="text-gray-500">Carregando...</Text>
-          </View>
-        )}
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
