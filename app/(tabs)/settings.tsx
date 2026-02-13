@@ -56,7 +56,7 @@ export default function SettingsScreen() {
               <View>
                 <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-lg">Modo Escuro</Text>
                 <Text className="text-gray-500 dark:text-zinc-400 text-xs">
-                  {isDark ? 'Visual focado (Zinc)' : 'Visual claro padrão'}
+                  {isDark ? 'Default' : 'Light'}
                 </Text>
               </View>
             </View>
@@ -84,7 +84,7 @@ export default function SettingsScreen() {
             <ChevronRight size={20} className="text-gray-300 dark:text-zinc-600" />
           </TouchableOpacity>
 
-          <TouchableOpacity className="flex-row items-center justify-between p-4 border-b border-gray-100 dark:border-zinc-800">
+          {/* <TouchableOpacity className="flex-row items-center justify-between p-4 border-b border-gray-100 dark:border-zinc-800">
             <View className="flex-row items-center">
               <View className="w-9 h-9 bg-green-50 dark:bg-green-500/10 rounded-full items-center justify-center mr-3">
                 <Bell size={18} className="text-green-600 dark:text-green-400" />
@@ -92,7 +92,7 @@ export default function SettingsScreen() {
               <Text className="text-gray-700 dark:text-zinc-200 font-medium">Notificações</Text>
             </View>
             <Switch value={true} trackColor={{ false: "#767577", true: "#22c55e" }} />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
           <TouchableOpacity onPress={handleSignOut} className="flex-row items-center justify-between p-4 active:bg-red-50 dark:active:bg-red-900/10">
              <View className="flex-row items-center">
