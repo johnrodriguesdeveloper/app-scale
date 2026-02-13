@@ -1,8 +1,9 @@
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, UserPlus, Trash2, ShieldCheck, User } from 'lucide-react-native';
+import { ArrowLeft, Search, UserPlus, Trash2, ShieldCheck } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { useColorScheme } from 'nativewind';
 
 interface Leader {
   id: string;
@@ -28,9 +29,11 @@ export default function ManageLeadersScreen() {
     departmentId: string; 
     departmentName: string; 
   }>();
+  const { colorScheme } = useColorScheme();
   
-  // Debug logs
-  console.log('Parâmetros recebidos:', { departmentId, departmentName });
+  // Cores dinâmicas para ícones e inputs
+  const iconColor = colorScheme === 'dark' ? '#e4e4e7' : '#374151'; // Zinc-200 vs Gray-700
+  const placeholderColor = colorScheme === 'dark' ? '#a1a1aa' : '#9ca3af';
   
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -67,7 +70,6 @@ export default function ManageLeadersScreen() {
     try {
       setLoading(true);
       
-      // Buscar líderes do departamento
       const { data, error } = await supabase
         .from('department_leaders')
         .select(`
@@ -109,13 +111,12 @@ export default function ManageLeadersScreen() {
     try {
       setSearching(true);
       
-      // Buscar usuários pelo nome, filtrando pela organização
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, email, avatar_url')
         .eq('organization_id', currentOrgId)
         .ilike('full_name', `%${text}%`)
-        .neq('org_role', 'master') // Excluir master global
+        .neq('org_role', 'master')
         .limit(10);
 
       if (error) {
@@ -123,7 +124,6 @@ export default function ManageLeadersScreen() {
         return;
       }
 
-      // Filtrar usuários que já são líderes
       const leaderUserIds = leaders.map(leader => leader.user_id);
       const availableUsers = (data || []).filter(
         user => !leaderUserIds.includes(user.id)
@@ -147,7 +147,7 @@ export default function ManageLeadersScreen() {
         });
 
       if (error) {
-        if (error.code === '23505') { // Unique violation
+        if (error.code === '23505') {
           Alert.alert('Aviso', 'Este usuário já é líder deste departamento.');
         } else {
           throw error;
@@ -157,12 +157,10 @@ export default function ManageLeadersScreen() {
 
       Alert.alert('Sucesso', `${userName} adicionado como líder com sucesso!`);
       
-      // Limpar busca e atualizar lista
       setSearchText('');
       setSearchResults([]);
       await fetchLeaders();
     } catch (error: any) {
-      console.error('Erro ao adicionar líder:', error);
       Alert.alert('Erro', error.message || 'Não foi possível adicionar o líder.');
     }
   };
@@ -191,7 +189,6 @@ export default function ManageLeadersScreen() {
               Alert.alert('Sucesso', 'Líder removido com sucesso!');
               await fetchLeaders();
             } catch (error) {
-              console.error('Erro ao remover líder:', error);
               Alert.alert('Erro', 'Ocorreu um erro inesperado.');
             }
           },
@@ -201,18 +198,18 @@ export default function ManageLeadersScreen() {
   };
 
   return (
-    <View className="flex-1 bg-gray-50">
+    <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
       {/* Header */}
-      <View className="bg-white border-b border-gray-200 px-4 py-4">
+      <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 py-4">
         <View className="flex-row items-center">
           <TouchableOpacity onPress={() => router.back()} className="mr-4">
-            <ArrowLeft size={24} color="#3b82f6" />
+            <ArrowLeft size={24} color={iconColor} />
           </TouchableOpacity>
           <View className="flex-1">
-            <Text className="text-xl font-bold text-gray-900">
+            <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">
               Gestão de Líderes
             </Text>
-            <Text className="text-gray-600 text-sm">
+            <Text className="text-gray-600 dark:text-zinc-400 text-sm">
               {departmentName}
             </Text>
           </View>
@@ -221,12 +218,13 @@ export default function ManageLeadersScreen() {
 
       <ScrollView className="flex-1">
         {/* Busca de Novos Líderes */}
-        <View className="bg-white border-b border-gray-200 px-4 py-4">
-          <View className="flex-row items-center bg-gray-100 p-3 rounded-xl">
-            <Search size={20} color="#666" className="mr-2" />
+        <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 py-4">
+          <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 p-3 rounded-xl">
+            <Search size={20} color={placeholderColor} className="mr-2" />
             <TextInput
               placeholder="Buscar membro para adicionar como líder..."
-              className="flex-1 text-base"
+              placeholderTextColor={placeholderColor}
+              className="flex-1 text-base text-gray-900 dark:text-zinc-100"
               value={searchText}
               onChangeText={searchUsers}
             />
@@ -235,33 +233,33 @@ export default function ManageLeadersScreen() {
           {searching && (
             <View className="mt-3 items-center">
               <ActivityIndicator size="small" color="#3b82f6" />
-              <Text className="text-gray-500 text-sm mt-1">Buscando...</Text>
+              <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-1">Buscando...</Text>
             </View>
           )}
 
           {/* Resultados da Busca */}
           {searchResults.length > 0 && (
             <View className="mt-3">
-              <Text className="text-gray-600 text-sm font-medium mb-2">
+              <Text className="text-gray-600 dark:text-zinc-400 text-sm font-medium mb-2">
                 Resultados da busca ({searchResults.length})
               </Text>
               {searchResults.map((user) => (
                 <TouchableOpacity
                   key={user.id}
                   onPress={() => handleAddLeader(user.id, user.full_name)}
-                  className="flex-row items-center p-3 bg-gray-50 rounded-lg mb-2"
+                  className="flex-row items-center p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg mb-2"
                 >
-                  <View className="w-10 h-10 bg-blue-600 rounded-full items-center justify-center mr-3">
+                  <View className="w-10 h-10 bg-blue-600 dark:bg-blue-700 rounded-full items-center justify-center mr-3">
                     <Text className="text-white font-bold">
                       {user.full_name.charAt(0).toUpperCase()}
                     </Text>
                   </View>
                   <View className="flex-1">
-                    <Text className="text-gray-900 font-medium">
+                    <Text className="text-gray-900 dark:text-zinc-100 font-medium">
                       {user.full_name}
                     </Text>
                     {user.email && (
-                      <Text className="text-gray-500 text-sm">
+                      <Text className="text-gray-500 dark:text-zinc-400 text-sm">
                         {user.email}
                       </Text>
                     )}
@@ -275,20 +273,21 @@ export default function ManageLeadersScreen() {
 
         {/* Lista de Líderes Atuais */}
         <View className="p-4">
-          <Text className="text-lg font-semibold text-gray-900 mb-4">
+          <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100 mb-4">
             Líderes Atuais ({leaders.length})
           </Text>
 
           {loading ? (
             <View className="items-center py-8">
               <ActivityIndicator size="large" color="#3b82f6" />
-              <Text className="text-gray-500 mt-2">Carregando líderes...</Text>
+              <Text className="text-gray-500 dark:text-zinc-400 mt-2">Carregando líderes...</Text>
             </View>
           ) : leaders.length > 0 ? (
             leaders.map((leader) => (
               <View
                 key={leader.id}
-                className="bg-amber-50 rounded-xl p-4 mb-3 border border-amber-200"
+                // Amber (amarelo) no dark mode fica melhor um pouco mais transparente e escuro
+                className="bg-amber-50 dark:bg-amber-900/10 rounded-xl p-4 mb-3 border border-amber-200 dark:border-amber-800/50"
               >
                 <View className="flex-row items-center justify-between">
                   <View className="flex-row items-center flex-1">
@@ -296,22 +295,22 @@ export default function ManageLeadersScreen() {
                       <ShieldCheck size={16} color="white" />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-gray-900 font-semibold">
+                      <Text className="text-gray-900 dark:text-zinc-100 font-semibold">
                         {leader.profiles.full_name}
                       </Text>
                       {leader.profiles.email && (
-                        <Text className="text-gray-500 text-sm">
+                        <Text className="text-gray-500 dark:text-zinc-400 text-sm">
                           {leader.profiles.email}
                         </Text>
                       )}
-                      <Text className="text-amber-600 text-xs mt-1">
+                      <Text className="text-amber-600 dark:text-amber-500 text-xs mt-1">
                         Líder do departamento
                       </Text>
                     </View>
                   </View>
                   <TouchableOpacity
                     onPress={() => handleRemoveLeader(leader.id, leader.profiles.full_name)}
-                    className="p-2 bg-red-100 rounded-lg"
+                    className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg"
                   >
                     <Trash2 size={16} color="#ef4444" />
                   </TouchableOpacity>
@@ -319,12 +318,12 @@ export default function ManageLeadersScreen() {
               </View>
             ))
           ) : (
-            <View className="bg-gray-50 rounded-xl p-6 items-center border border-gray-200">
-              <ShieldCheck size={32} color="#9ca3af" />
-              <Text className="text-gray-500 mt-2 text-center">
+            <View className="bg-gray-50 dark:bg-zinc-900 rounded-xl p-6 items-center border border-gray-200 dark:border-zinc-800">
+              <ShieldCheck size={32} color={placeholderColor} />
+              <Text className="text-gray-500 dark:text-zinc-400 mt-2 text-center">
                 Nenhum líder definido ainda
               </Text>
-              <Text className="text-gray-400 text-sm text-center mt-1">
+              <Text className="text-gray-400 dark:text-zinc-500 text-sm text-center mt-1">
                 Use a busca acima para adicionar líderes
               </Text>
             </View>
