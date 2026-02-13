@@ -1,17 +1,16 @@
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, Platform } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash, Calendar, Shield } from 'lucide-react-native';
+import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash, Calendar, Shield, AlertTriangle } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { useColorScheme } from 'nativewind'; // <--- Importante para ícones dinâmicos
+import { useColorScheme } from 'nativewind';
 
 export default function DepartmentDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { colorScheme } = useColorScheme(); // Hook para saber se é dark
+  const { colorScheme } = useColorScheme();
   
-  // Cores dinâmicas para ícones
-  const iconColor = colorScheme === 'dark' ? '#e4e4e7' : '#374151'; // Zinc-200 vs Gray-700
+  const iconColor = colorScheme === 'dark' ? '#e4e4e7' : '#374151';
   const placeholderColor = colorScheme === 'dark' ? '#a1a1aa' : '#9ca3af';
 
   const [department, setDepartment] = useState<any>(null);
@@ -23,14 +22,57 @@ export default function DepartmentDetailsScreen() {
   const [isMaster, setIsMaster] = useState(false);
   const [isLeader, setIsLeader] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  // Modais de Criação
   const [showModal, setShowModal] = useState(false);
   const [newFunctionName, setNewFunctionName] = useState('');
   const [savingFunction, setSavingFunction] = useState(false);
   const [showSubDepartmentModal, setShowSubDepartmentModal] = useState(false);
   const [newSubDepartmentName, setNewSubDepartmentName] = useState('');
   const [savingSubDepartment, setSavingSubDepartment] = useState(false);
-  const [deletingDepartment, setDeletingDepartment] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
+
+  // --- NOVO: ESTADO DO MODAL DE CONFIRMAÇÃO ---
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState({
+    title: '',
+    message: '',
+    onConfirm: async () => {},
+    isDestructive: false,
+    loading: false
+  });
+
+  // Função auxiliar para abrir o modal de confirmação
+  const requestConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, isDestructive = false) => {
+    setConfirmConfig({
+      title,
+      message,
+      onConfirm,
+      isDestructive,
+      loading: false
+    });
+    setConfirmModalVisible(true);
+  };
+
+const handleConfirmAction = async () => {
+    // 1. Ativa loading
+    setConfirmConfig(prev => ({ ...prev, loading: true }));
+    
+    try {
+      // 2. Tenta executar a ação
+      await confirmConfig.onConfirm();
+      // 3. Se deu certo, fecha o modal
+      setConfirmModalVisible(false);
+    } catch (error: any) {
+      console.error('Erro na confirmação:', error);
+      // 4. Mostra alerta se der erro
+      Alert.alert('Erro', error.message || 'Não foi possível completar a ação.');
+    } finally {
+      // 5. Desativa loading
+      setConfirmConfig(prev => ({ ...prev, loading: false }));
+    }
+  };
+  // ---------------------------------------------
 
   const fetchFunctions = async (departmentId: string) => {
     const { data: deptFunctions } = await supabase
@@ -38,10 +80,7 @@ export default function DepartmentDetailsScreen() {
       .select('id, name, description')
       .eq('department_id', departmentId)
       .order('name');
-
-    if (deptFunctions) {
-      setFunctions(deptFunctions);
-    }
+    if (deptFunctions) setFunctions(deptFunctions);
   };
 
   const fetchSubDepartments = async (departmentId: string) => {
@@ -50,10 +89,7 @@ export default function DepartmentDetailsScreen() {
       .select('id, name, description, parent_id')
       .eq('parent_id', departmentId)
       .order('name');
-
-    if (children) {
-      setSubDepartments(children);
-    }
+    if (children) setSubDepartments(children);
   };
 
   const fetchParentDepartment = async (parentId: string) => {
@@ -62,41 +98,29 @@ export default function DepartmentDetailsScreen() {
       .select('id, name')
       .eq('id', parentId)
       .single();
-
-    if (parent) {
-      setParentDepartment(parent);
-    }
+    if (parent) setParentDepartment(parent);
   };
 
-  // Verificar se é admin e carregar dados
+  const fetchMembers = async (departmentId: string) => {
+    const { data: deptMembers } = await supabase
+      .from('department_members')
+      .select(`
+        id, user_id, dept_role,
+        profiles:user_id ( full_name, email, avatar_url ),
+        department_functions:function_id ( name )
+      `)
+      .eq('department_id', departmentId);
+    if (deptMembers) setMembers(deptMembers);
+  };
+
   useEffect(() => {
-    console.log('Iniciando carga para ID:', id);
-    
     async function loadData() {
       setLoading(true);
-      setDepartment(null);
-      setParentDepartment(null);
-      setSubDepartments([]);
-      setMembers([]);
-      setFunctions([]);
-      setIsAdmin(false);
-      setIsMaster(false);
-      setIsLeader(false);
-
-      if (!id) {
-        console.log('ID não fornecido, retornando...');
-        setLoading(false);
-        return;
-      }
+      if (!id) { setLoading(false); return; }
 
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('Usuário não autenticado, retornando...');
-        setLoading(false);
-        return;
-      }
+      if (!user) { setLoading(false); return; }
 
-      // Verificar se é admin
       const { data: profile } = await supabase
         .from('profiles')
         .select('org_role')
@@ -105,12 +129,10 @@ export default function DepartmentDetailsScreen() {
 
       if (profile) {
         const masterStatus = profile.org_role === 'master';
-        const adminStatus = profile.org_role === 'admin' || profile.org_role === 'master';
         setIsMaster(masterStatus);
-        setIsAdmin(adminStatus);
+        setIsAdmin(profile.org_role === 'admin' || masterStatus);
       }
 
-      // Verificar se é líder deste departamento específico
       const { data: leaderCheck } = await supabase
         .from('department_leaders')
         .select('id')
@@ -120,350 +142,206 @@ export default function DepartmentDetailsScreen() {
       
       if (leaderCheck) setIsLeader(true);
 
-      // Buscar detalhes do departamento
-      const { data: dept, error } = await supabase
+      const { data: dept } = await supabase
         .from('departments')
         .select('id, name, description, priority_order, availability_deadline_day, parent_id, organization_id')
         .eq('id', id)
         .single();
 
-      if (error) {
-        console.error('ERRO AO BUSCAR DEPARTAMENTO:', error);
-      }
-
       if (dept) {
         setDepartment(dept);
-
-        if (dept.parent_id) {
-          await fetchParentDepartment(dept.parent_id);
-        } else {
-          setParentDepartment(null);
-        }
+        if (dept.parent_id) await fetchParentDepartment(dept.parent_id);
       }
 
-      // Buscar membros do departamento
       await fetchMembers(String(id));
-
       await fetchSubDepartments(String(id));
       await fetchFunctions(String(id));
-
       setLoading(false);
     }
-
     loadData();
   }, [id]);
 
-  const fetchMembers = async (departmentId: string) => {
-    const { data: deptMembers } = await supabase
-      .from('department_members')
-      .select(`
-        id,
-        user_id,
-        dept_role,
-        profiles:user_id ( full_name, email, avatar_url ),
-        department_functions:function_id ( name )
-      `)
-      .eq('department_id', departmentId);
+  // --- AÇÕES COM O NOVO MODAL ---
 
-    if (deptMembers) {
-      setMembers(deptMembers);
-    }
-  };
-
-  const handleRemoveMember = async (memberId: string, memberName: string) => {
-    Alert.alert(
+const handleRemoveMember = (memberId: string, memberName: string) => {
+    requestConfirmation(
       'Remover Membro',
-      `Tem certeza que deseja remover '${memberName}' do departamento?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Remover',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('department_members')
-              .delete()
-              .eq('id', memberId);
+      `ATENÇÃO: '${memberName}' possui escalas agendadas.\n\nAo remover este membro, TODAS as escalas futuras e passadas dele neste departamento também serão apagadas.\n\nDeseja continuar?`,
+      async () => {
+        // 1. Primeiro: Apagar as escalas (rosters) desse membro
+        // Isso resolve o erro de Foreign Key (23503)
+        const { error: rosterError } = await supabase
+          .from('rosters')
+          .delete()
+          .eq('member_id', memberId);
 
-            if (error) {
-              Alert.alert('Erro', 'Não foi possível remover o membro');
-              return;
-            }
+        if (rosterError) {
+            console.error('Erro ao limpar escalas:', rosterError);
+            throw new Error('Falha ao limpar as escalas do membro.');
+        }
 
-            await fetchMembers(String(id));
-          },
-        },
-      ]
+        // 2. Segundo: Agora sim, apagar o membro
+        const { error } = await supabase
+          .from('department_members')
+          .delete()
+          .eq('id', memberId);
+
+        if (error) throw error;
+
+        // 3. Atualizar a tela instantaneamente
+        setMembers(prevMembers => prevMembers.filter(m => m.id !== memberId));
+      },
+      true // Botão vermelho (Destrutivo)
     );
   };
 
-  const handleCreateFunction = async () => {
-    if (!newFunctionName.trim() || !id) {
-      Alert.alert('Erro', 'Por favor, preencha o nome da função');
-      return;
-    }
+  const handleDeleteSubDepartment = (subDeptId: string, subDeptName: string) => {
+    requestConfirmation(
+      'Excluir Sub-departamento',
+      `Ao excluir '${subDeptName}', você removerá todos os vínculos de membros e escalas associados.`,
+      async () => {
+        const { error } = await supabase.from('departments').delete().eq('id', subDeptId);
+        if (error) Alert.alert('Erro', 'Verifique se há dependências antes de excluir.');
+        else {
+          setSubDepartments((prev) => prev.filter((sub) => sub.id !== subDeptId));
+          await fetchSubDepartments(String(id));
+        }
+      },
+      true
+    );
+  };
 
+const handleDeleteFunction = (funcId: string, funcName: string) => {
+    requestConfirmation(
+      'Excluir Função',
+      `Deseja excluir a função '${funcName}' permanentemente?`,
+      async () => {
+        const { error } = await supabase
+          .from('department_functions')
+          .delete()
+          .eq('id', funcId);
+
+        if (error) throw error;
+
+        // Atualiza a tela na hora
+        setFunctions(prev => prev.filter(f => f.id !== funcId));
+      },
+      true
+    );
+  };
+
+  // const handleDeleteDepartment = () => {
+  // //   if (!id) return;
+  // //   requestConfirmation(
+  // //     'Apagar Departamento',
+  // //     'Tem certeza absoluta? Esta ação apagará o departamento e todos os seus dados. Não pode ser desfeita.',
+  // //     async () => {
+  // //       setDeletingDepartment(true);
+  // //       try {
+  // //           const { error } = await supabase.from('departments').delete().eq('id', String(id));
+  // //           if (error) throw error;
+  // //           if (router.canGoBack()) router.back();
+  // //           else router.push('/(tabs)/departments');
+  // //       } catch (error: any) {
+  // //           Alert.alert('Erro', error.message);
+  // //       } finally {
+  // //           setDeletingDepartment(false);
+  // //       }
+  // //     },
+  // //     true
+  // //   );
+  // // };
+
+  // --- CRIAÇÃO ---
+
+  const handleCreateFunction = async () => {
+    if (!newFunctionName.trim() || !id) return Alert.alert('Erro', 'Preencha o nome');
     setSavingFunction(true);
     try {
-      const { error } = await supabase
-        .from('department_functions')
-        .insert({
-          department_id: id,
-          name: newFunctionName.trim(),
-        });
-
-      if (error) {
-        Alert.alert('Erro ao criar função', error.message);
-      } else {
-        Alert.alert('Sucesso!', 'Função criada com sucesso.');
-        setShowModal(false);
-        setNewFunctionName('');
-
-        // Recarregar funções
-        await fetchFunctions(String(id));
-      }
+      const { error } = await supabase.from('department_functions').insert({
+        department_id: id,
+        name: newFunctionName.trim(),
+      });
+      if (error) throw error;
+      setShowModal(false);
+      setNewFunctionName('');
+      await fetchFunctions(String(id));
     } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Ocorreu um erro inesperado');
+      Alert.alert('Erro', error.message);
     } finally {
       setSavingFunction(false);
     }
   };
 
   const handleCreateSubDepartment = async () => {
-    if (!newSubDepartmentName.trim() || !id) {
-      Alert.alert('Erro', 'Por favor, preencha o nome do sub-departamento');
-      return;
-    }
-
-    if (!department?.organization_id) {
-      Alert.alert('Erro', 'Não foi possível identificar a organização do departamento atual');
-      return;
-    }
-
+    if (!newSubDepartmentName.trim() || !id) return Alert.alert('Erro', 'Preencha o nome');
     setSavingSubDepartment(true);
     try {
-      const { error } = await supabase
-        .from('departments')
-        .insert({
-          name: newSubDepartmentName.trim(),
-          parent_id: String(id),
-          organization_id: department.organization_id,
-          availability_deadline_day: department.availability_deadline_day || 20,
-          priority_order: 99,
-        });
-
-      if (error) {
-        Alert.alert('Erro ao criar sub-departamento', error.message);
-      } else {
-        Alert.alert('Sucesso!', 'Sub-departamento criado com sucesso.');
-        setShowSubDepartmentModal(false);
-        setNewSubDepartmentName('');
-        await fetchSubDepartments(String(id));
-      }
+      const { error } = await supabase.from('departments').insert({
+        name: newSubDepartmentName.trim(),
+        parent_id: String(id),
+        organization_id: department.organization_id,
+        availability_deadline_day: department.availability_deadline_day || 20,
+        priority_order: 99,
+      });
+      if (error) throw error;
+      setShowSubDepartmentModal(false);
+      setNewSubDepartmentName('');
+      await fetchSubDepartments(String(id));
     } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Ocorreu um erro inesperado');
+      Alert.alert('Erro', error.message);
     } finally {
       setSavingSubDepartment(false);
     }
   };
 
-  const handleDeleteSubDepartment = (subDeptId: string, subDeptName: string) => {
-    Alert.alert(
-      'Excluir Sub-departamento',
-      'Excluir Sub-departamento? Isso removerá membros e escalas vinculados a ele.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('departments')
-              .delete()
-              .eq('id', subDeptId);
-
-            if (error) {
-              Alert.alert(
-                'Não foi possível excluir',
-                'Verifique se há membros ou escalas ativas vinculadas a este sub-departamento.'
-              );
-              return;
-            }
-
-            setSubDepartments((prev) => prev.filter((sub) => sub.id !== subDeptId));
-            await fetchSubDepartments(String(id));
-          },
-        },
-      ]
-    );
-  };
-
-  const handleDeleteFunction = (funcId: string, funcName: string) => {
-    Alert.alert(
-      'Excluir Função',
-      'Excluir Função?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('department_functions')
-              .delete()
-              .eq('id', funcId);
-
-            if (error) {
-              Alert.alert(
-                'Não foi possível excluir',
-                'Verifique se há escalas ou membros vinculados a esta função.'
-              );
-              return;
-            }
-
-            setFunctions((prev) => prev.filter((func) => func.id !== funcId));
-            await fetchFunctions(String(id));
-          },
-        },
-      ]
-    );
-  };
-
-  const handleDeleteDepartment = () => {
-    if (!id) return;
-
-    Alert.alert(
-      'Apagar departamento',
-      'Tem certeza que deseja apagar este departamento? Esta ação não pode ser desfeita.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Apagar',
-          style: 'destructive',
-          onPress: async () => {
-            setDeletingDepartment(true);
-            try {
-              const { error } = await supabase
-                .from('departments')
-                .delete()
-                .eq('id', String(id));
-
-              if (error) {
-                Alert.alert('Erro ao apagar departamento', error.message);
-                return;
-              }
-
-              Alert.alert('Sucesso!', 'Departamento apagado com sucesso.');
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.push('/(tabs)/departments');
-              }
-            } catch (error: any) {
-              Alert.alert('Erro', error.message || 'Ocorreu um erro inesperado');
-            } finally {
-              setDeletingDepartment(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  if (loading) {
-    return (
-      <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center">
-        <ActivityIndicator size="large" color="#3b82f6" />
-      </View>
-    );
-  }
-
-  if (!department) {
-    return (
-      <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center p-4">
-        <Text className="text-gray-500 dark:text-zinc-400 text-center">Departamento não encontrado</Text>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="mt-4 bg-blue-600 rounded-lg px-6 py-3"
-        >
-          <Text className="text-white font-semibold">Voltar</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  if (loading) return <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center"><ActivityIndicator size="large" color="#3b82f6" /></View>;
+  if (!department) return <View className="flex-1 items-center justify-center"><Text>Não encontrado</Text></View>;
 
   return (
     <>
       <ScrollView className="flex-1 bg-gray-50 dark:bg-zinc-950">
         {/* Header */}
         <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 py-3 flex-row items-center">
-          <TouchableOpacity
-            onPress={() => {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.push('/(tabs)/departments');
-              }
-            }}
-            className="mr-4"
-          >
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/(tabs)/departments')} className="mr-4">
             <ArrowLeft size={24} color={iconColor} />
           </TouchableOpacity>
           <View className="flex-1">
             <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">{department.name}</Text>
-            {department.description && (
-              <Text className="text-gray-600 dark:text-zinc-400 text-sm mt-1">{department.description}</Text>
-            )}
+            {department.description && <Text className="text-gray-600 dark:text-zinc-400 text-sm mt-1">{department.description}</Text>}
             {department.parent_id && parentDepartment?.name && (
-              <TouchableOpacity
-                onPress={() =>
-                  router.push({
-                    pathname: '/(tabs)/departments/[id]',
-                    params: { id: parentDepartment.id }
-                  })
-                }
-                className="flex-row items-center mt-1"
-              >
-                <Text className="text-gray-500 dark:text-zinc-500 text-sm">{parentDepartment.name}</Text>
+              <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)/departments/[id]', params: { id: parentDepartment.id } })}>
+                <Text className="text-indigo-600 dark:text-indigo-400 text-sm font-medium mt-1">↳ {parentDepartment.name}</Text>
               </TouchableOpacity>
             )}
-          </View>
-          {/* Botões de ação */}
-          <View className="flex-row gap-2">
-            {(isAdmin || isMaster) && (
-              <TouchableOpacity
-                onPress={() => router.push({
-                  pathname: '/department-leaders',
-                  params: { 
-                    departmentId: String(id),
-                    departmentName: department?.name || 'Departamento'
-                  }
-                })}
-                className="bg-amber-600 rounded-lg px-3 py-2 flex-row items-center"
-              >
-                <Shield size={16} color="white" style={{ marginRight: 4 }} />
-                <Text className="text-white font-semibold text-sm">Liderança</Text>
-              </TouchableOpacity>
-            )}
-            {(isAdmin || isMaster || isLeader) && (
-            <TouchableOpacity
-              onPress={() => router.push({
-                pathname: '/department-roster',
-                params: { 
-                  departmentId: String(id),
-                  departmentName: department.name 
-                }
-              })}
-              className="bg-blue-600 rounded-lg px-3 py-2 flex-row items-center"
-            >
-              <Calendar size={16} color="white" style={{ marginRight: 4 }} />
-              <Text className="text-white font-semibold text-sm">Gerenciar Escala</Text>
-            </TouchableOpacity>
-          )}
           </View>
         </View>
 
         <View className="p-4">
+          
+          {/* Ações Rápidas */}
+          {(isAdmin || isMaster || isLeader) && (
+            <View className="mb-6 flex-row gap-3">
+              {(isAdmin || isMaster) && (
+                <TouchableOpacity
+                  onPress={() => router.push({ pathname: '/department-leaders', params: { departmentId: String(id), departmentName: department?.name } })}
+                  className="flex-1 bg-amber-600 rounded-xl px-4 py-3 flex-row items-center justify-center shadow-sm active:bg-amber-700"
+                >
+                  <Shield size={20} color="white" style={{ marginRight: 8 }} />
+                  <Text className="text-white font-bold">Liderança</Text>
+                </TouchableOpacity>
+              )}
+              
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: '/department-roster', params: { departmentId: String(id), departmentName: department.name } })}
+                className="flex-1 bg-blue-600 rounded-xl px-4 py-3 flex-row items-center justify-center shadow-sm active:bg-blue-700"
+              >
+                <Calendar size={20} color="white" style={{ marginRight: 8 }} />
+                <Text className="text-white font-bold">Escala</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Sub-departamentos */}
           {(subDepartments.length > 0 || isAdmin) && (
             <View className="mb-6">
@@ -473,10 +351,7 @@ export default function DepartmentDetailsScreen() {
                   <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">Sub-departamentos</Text>
                 </View>
                 {isAdmin && (
-                  <TouchableOpacity
-                    onPress={() => setShowSubDepartmentModal(true)}
-                    className="bg-indigo-600 rounded-lg px-3 py-1.5 flex-row items-center"
-                  >
+                  <TouchableOpacity onPress={() => setShowSubDepartmentModal(true)} className="bg-indigo-600 rounded-lg px-3 py-1.5 flex-row items-center">
                     <Plus size={16} color="white" style={{ marginRight: 4 }} />
                     <Text className="text-white font-semibold text-xs">Criar</Text>
                   </TouchableOpacity>
@@ -486,112 +361,79 @@ export default function DepartmentDetailsScreen() {
               {subDepartments.length > 0 ? (
                 <View>
                   {subDepartments.map((child, index) => (
-                    <View
-                      key={child.id}
-                      // Ajustado para fundo indigo bem suave no dark
-                      className={`bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 flex-row items-center ${index !== subDepartments.length - 1 ? 'mb-3' : ''}`}
-                    >
-                      <TouchableOpacity
-                        onPress={() =>
-                          router.push({
-                            pathname: '/departments/[id]',
-                            params: { id: String(child.id) },
-                          })
-                        }
-                        className="flex-1 flex-row items-center"
-                      >
+                    <View key={child.id} className={`bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 flex-row items-center ${index !== subDepartments.length - 1 ? 'mb-3' : ''}`}>
+                      <TouchableOpacity className="flex-1 flex-row items-center" onPress={() => router.push({ pathname: '/departments/[id]', params: { id: String(child.id) } })}>
                         <View className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 items-center justify-center mr-3">
-                          <Folder size={20} color="#4f46e5" />
+                            <Folder size={20} color="#4f46e5" />
                         </View>
                         <View className="flex-1">
-                          <Text className="text-gray-900 dark:text-zinc-100 font-semibold">{child.name}</Text>
-                          {child.description && (
-                            <Text className="text-indigo-700 dark:text-indigo-300 text-sm mt-1">{child.description}</Text>
-                          )}
+                            <Text className="text-gray-900 dark:text-zinc-100 font-semibold">{child.name}</Text>
+                            {child.description && <Text className="text-indigo-700 dark:text-indigo-300 text-sm">{child.description}</Text>}
                         </View>
                       </TouchableOpacity>
                       {isMaster && (
-                        <TouchableOpacity
-                          onPress={() => handleDeleteSubDepartment(String(child.id), String(child.name))}
-                        className="p-2 ml-2"
-                      >
-                        <Trash size={18} color="#ef4444" />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <View className="bg-white dark:bg-zinc-900 rounded-xl p-6 items-center border border-gray-200 dark:border-zinc-800">
-                <Folder size={32} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
-                <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhum sub-departamento encontrado</Text>
-                {isAdmin && (
-                  <TouchableOpacity
-                    onPress={() => setShowSubDepartmentModal(true)}
-                    className="mt-4 bg-indigo-600 rounded-lg px-4 py-2"
-                  >
-                    <Text className="text-white font-semibold text-sm">Criar sub-departamento</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
+                        <TouchableOpacity onPress={() => handleDeleteSubDepartment(String(child.id), String(child.name))} className="p-2 ml-2">
+                          <Trash size={18} color="#ef4444" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View className="bg-white dark:bg-zinc-900 rounded-xl p-6 items-center border border-gray-200 dark:border-zinc-800">
+                  <Folder size={32} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
+                  <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhum sub-departamento</Text>
+                  {isAdmin && <TouchableOpacity onPress={() => setShowSubDepartmentModal(true)} className="mt-4 bg-indigo-600 rounded-lg px-4 py-2"><Text className="text-white font-semibold text-sm">Criar</Text></TouchableOpacity>}
+                </View>
+              )}
+            </View>
           )}
 
-          {/* Membros do Departamento */}
+          {/* Membros */}
           <View className="mb-6">
-            <TouchableOpacity
-              onPress={() => router.push({
-                pathname: '/(tabs)/departments/member-list',
-                params: { id: String(id), name: department?.name || 'Departamento' }
-              })}
-              className="flex-row items-center justify-between mb-4"
-            >
+            <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)/departments/member-list', params: { id: String(id), name: department?.name } })} className="flex-row items-center justify-between mb-4">
               <View className="flex-row items-center">
                 <Users size={20} color="#3b82f6" style={{ marginRight: 8 }} />
                 <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">Membros</Text>
               </View>
               <View className="flex-row items-center">
                 <Text className="text-gray-500 dark:text-zinc-400 text-sm mr-2">{members.length} membro(s)</Text>
-                <Text className="text-blue-600 dark:text-blue-400 text-sm">Ver Lista Completa →</Text>
+                <Text className="text-blue-600 dark:text-blue-400 text-sm">Ver membros→</Text>
               </View>
             </TouchableOpacity>
 
             {members.length > 0 ? (
               <View className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800">
-                {members.map((member, index) => (
-                  <View
-                    key={member.user_id}
-                    className={`p-4 ${index !== members.length - 1 ? 'border-b border-gray-100 dark:border-zinc-800' : ''}`}
-                  >
-                    <View className="flex-row items-center">
-                      {member.profiles?.avatar_url ? (
+                {members.slice(0, 5).map((member, index) => (
+                  <View key={member.id} className={`p-4 ${index !== members.length - 1 ? 'border-b border-gray-100 dark:border-zinc-800' : ''}`}>
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-row items-center flex-1">
                         <View className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 items-center justify-center mr-3">
-                          <Text className="text-blue-600 dark:text-blue-400 font-semibold">
-                            {member.profiles.full_name?.charAt(0).toUpperCase() || 'U'}
-                          </Text>
+                          <Text className="text-blue-600 dark:text-blue-400 font-semibold">{member.profiles?.full_name?.charAt(0).toUpperCase() || 'U'}</Text>
                         </View>
-                      ) : (
-                        <View className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 items-center justify-center mr-3">
-                          <User size={20} color="#3b82f6" />
+                        <View className="flex-1 mr-2">
+                          <Text className="text-gray-900 dark:text-zinc-100 font-medium" numberOfLines={1}>{member.profiles?.full_name || 'Sem nome'}</Text>
+                          <Text className="text-gray-500 dark:text-zinc-400 text-sm">{member.dept_role === 'leader' ? 'Líder' : 'Membro'}</Text>
                         </View>
-                      )}
-                      <View className="flex-1">
-                        <Text className="text-gray-900 dark:text-zinc-100 font-medium">
-                          {member.profiles?.full_name || member.profiles?.email || 'Sem nome'}
-                        </Text>
-                        <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-1">
-                          {member.dept_role === 'leader' ? 'Líder' : 'Membro'}
-                        </Text>
                       </View>
+                      {(isMaster || isAdmin) && (
+                        <TouchableOpacity onPress={() => handleRemoveMember(String(member.id), member.profiles?.full_name || 'Membro')} className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                          <Trash size={18} color="#ef4444" />
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </View>
                 ))}
+                {members.length > 5 && (
+                  <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)/departments/member-list', params: { id: String(id), name: department?.name } })} className="p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-b-xl items-center">
+                    <Text className="text-blue-600 dark:text-blue-400 font-medium text-sm">Ver todos os {members.length} membros</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               <View className="bg-white dark:bg-zinc-900 rounded-xl p-6 items-center border border-gray-200 dark:border-zinc-800">
                 <Users size={32} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
-                <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhum membro encontrado</Text>
+                <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhum membro</Text>
               </View>
             )}
           </View>
@@ -604,36 +446,24 @@ export default function DepartmentDetailsScreen() {
                 <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">Funções</Text>
               </View>
               {isAdmin && (
-                <TouchableOpacity
-                  onPress={() => setShowModal(true)}
-                  className="bg-blue-600 rounded-lg px-3 py-1.5 flex-row items-center"
-                >
+                <TouchableOpacity onPress={() => setShowModal(true)} className="bg-blue-600 rounded-lg px-3 py-1.5 flex-row items-center">
                   <Plus size={16} color="white" style={{ marginRight: 4 }} />
-                  <Text className="text-white font-semibold text-xs">Nova Função</Text>
+                  <Text className="text-white font-semibold text-xs">Nova</Text>
                 </TouchableOpacity>
               )}
             </View>
-
             {functions.length > 0 ? (
               <View className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800">
                 {functions.map((func, index) => (
-                  <View
-                    key={func.id}
-                    className={`p-4 ${index !== functions.length - 1 ? 'border-b border-gray-100 dark:border-zinc-800' : ''}`}
-                  >
-                    <View className="flex-row items-center">
-                      <View className="flex-1">
+                  <View key={func.id} className={`p-4 ${index !== functions.length - 1 ? 'border-b border-gray-100 dark:border-zinc-800' : ''}`}>
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-1 mr-2">
                         <Text className="text-gray-900 dark:text-zinc-100 font-medium">{func.name}</Text>
-                        {func.description && (
-                          <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-1">{func.description}</Text>
-                        )}
+                        {func.description && <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-1">{func.description}</Text>}
                       </View>
                       {isAdmin && (
-                        <TouchableOpacity
-                          onPress={() => handleDeleteFunction(String(func.id), String(func.name))}
-                          className="p-2 ml-2"
-                        >
-                          <Trash size={16} color="#ef4444" />
+                        <TouchableOpacity onPress={() => handleDeleteFunction(String(func.id), String(func.name))} className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                          <Trash size={18} color="#ef4444" />
                         </TouchableOpacity>
                       )}
                     </View>
@@ -643,210 +473,79 @@ export default function DepartmentDetailsScreen() {
             ) : (
               <View className="bg-white dark:bg-zinc-900 rounded-xl p-6 items-center border border-gray-200 dark:border-zinc-800">
                 <Briefcase size={32} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
-                <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhuma função cadastrada</Text>
-                {isAdmin && (
-                  <TouchableOpacity
-                    onPress={() => setShowModal(true)}
-                    className="mt-4 bg-blue-600 rounded-lg px-4 py-2"
-                  >
-                    <Text className="text-white font-semibold text-sm">Criar primeira função</Text>
-                  </TouchableOpacity>
-                )}
+                <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhuma função</Text>
+                {isAdmin && <TouchableOpacity onPress={() => setShowModal(true)} className="mt-4 bg-blue-600 rounded-lg px-4 py-2"><Text className="text-white font-semibold text-sm">Criar</Text></TouchableOpacity>}
               </View>
             )}
           </View>
         </View>
       </ScrollView>
 
-      {/* Modal para criar novo sub-departamento */}
-      <Modal
-        visible={showSubDepartmentModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowSubDepartmentModal(false)}
-      >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6">
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Novo Sub-departamento</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowSubDepartmentModal(false);
-                  setNewSubDepartmentName('');
-                }}
-              >
-                <Text className="text-gray-500 dark:text-zinc-400 text-lg">✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
-                Nome do Sub-departamento
-              </Text>
-              <TextInput
-                className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 text-base"
-                placeholder="Ex: Louvor, Infantil, Administrativo..."
-                placeholderTextColor={placeholderColor}
-                value={newSubDepartmentName}
-                onChangeText={setNewSubDepartmentName}
-                editable={!savingSubDepartment}
-              />
-            </View>
-
-            <TouchableOpacity
-              onPress={handleCreateSubDepartment}
-              disabled={savingSubDepartment || !newSubDepartmentName.trim()}
-              className="bg-indigo-600 rounded-lg py-4 px-6 mb-3"
-              style={{ opacity: savingSubDepartment || !newSubDepartmentName.trim() ? 0.5 : 1 }}
-            >
-              {savingSubDepartment ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text className="text-white font-semibold text-center">Criar Sub-departamento</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                setShowSubDepartmentModal(false);
-                setNewSubDepartmentName('');
-              }}
-              className="bg-gray-100 dark:bg-zinc-800 rounded-lg py-4 px-6"
-            >
-              <Text className="text-gray-700 dark:text-zinc-300 font-semibold text-center">Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal para criar nova função */}
-      <Modal
-        visible={showModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowModal(false)}
-      >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6">
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Nova Função</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowModal(false);
-                  setNewFunctionName('');
-                }}
-              >
-                <Text className="text-gray-500 dark:text-zinc-400 text-lg">✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">
-                Nome da Função
-              </Text>
-              <TextInput
-                className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 text-base"
-                placeholder="Ex: Guitarrista, Professor, Monitor..."
-                placeholderTextColor={placeholderColor}
-                value={newFunctionName}
-                onChangeText={setNewFunctionName}
-                editable={!savingFunction}
-              />
-            </View>
-
-            <TouchableOpacity
-              onPress={handleCreateFunction}
-              disabled={savingFunction || !newFunctionName.trim()}
-              className="bg-blue-600 rounded-lg py-4 px-6 mb-3"
-              style={{ opacity: savingFunction || !newFunctionName.trim() ? 0.5 : 1 }}
-            >
-              {savingFunction ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text className="text-white font-semibold text-center">Criar Função</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                setShowModal(false);
-                setNewFunctionName('');
-              }}
-              className="bg-gray-100 dark:bg-zinc-800 rounded-lg py-4 px-6"
-            >
-              <Text className="text-gray-700 dark:text-zinc-300 font-semibold text-center">Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal para visualizar membros */}
-      <Modal
-        visible={showMembersModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowMembersModal(false)}
-      >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6 max-h-[80%]">
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Membros do Departamento</Text>
-              <TouchableOpacity
-                onPress={() => setShowMembersModal(false)}
-              >
-                <Text className="text-gray-500 dark:text-zinc-400 text-lg">✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View className="flex-1">
-              {members.length > 0 ? (
-                <View className="flex-1">
-                  {members.map((member) => (
-                    <View
-                      key={member.id}
-                      className="flex-row items-center justify-between p-4 border-b border-gray-100 dark:border-zinc-800"
-                    >
-                      <View className="flex-row items-center flex-1">
-                        {member.profiles?.avatar_url ? (
-                          <View className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 items-center justify-center mr-3">
-                            <Text className="text-blue-600 dark:text-blue-400 font-semibold text-lg">
-                              {member.profiles.full_name?.charAt(0).toUpperCase() || 'U'}
-                            </Text>
-                          </View>
+      {/* --- MODAL DE CONFIRMAÇÃO GENÉRICO --- */}
+      <Modal visible={confirmModalVisible} transparent animationType="fade" onRequestClose={() => setConfirmModalVisible(false)}>
+        <View className="flex-1 bg-black/60 justify-center items-center p-4">
+            <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
+                <View className="items-center mb-4">
+                    <View className={`w-12 h-12 rounded-full items-center justify-center mb-3 ${confirmConfig.isDestructive ? 'bg-red-100 dark:bg-red-900/30' : 'bg-blue-100 dark:bg-blue-900/30'}`}>
+                        {confirmConfig.isDestructive ? (
+                            <AlertTriangle size={24} color={colorScheme === 'dark' ? '#ef4444' : '#dc2626'} />
                         ) : (
-                          <View className="w-12 h-12 rounded-full bg-gray-200 dark:bg-zinc-700 items-center justify-center mr-3">
-                            <User size={20} color={colorScheme === 'dark' ? '#d4d4d8' : '#6b7280'} />
-                          </View>
+                            <Shield size={24} color={colorScheme === 'dark' ? '#3b82f6' : '#2563eb'} />
                         )}
-                        <View className="flex-1">
-                          <Text className="text-gray-900 dark:text-zinc-100 font-semibold">
-                            {member.profiles?.full_name || 'Usuário sem nome'}
-                          </Text>
-                          <Text className="text-gray-500 dark:text-zinc-400 text-sm">
-                            {member.department_functions?.name || 'Sem função definida'}
-                          </Text>
-                        </View>
-                      </View>
-                      {isMaster && (
-                        <TouchableOpacity
-                          onPress={() => handleRemoveMember(member.id, member.profiles?.full_name || 'Usuário')}
-                          className="p-2"
-                        >
-                          <Trash size={16} color="#ef4444" />
-                        </TouchableOpacity>
-                      )}
                     </View>
-                  ))}
+                    <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 text-center mb-2">
+                        {confirmConfig.title}
+                    </Text>
+                    <Text className="text-gray-500 dark:text-zinc-400 text-center text-base">
+                        {confirmConfig.message}
+                    </Text>
                 </View>
-              ) : (
-                <View className="flex-1 items-center justify-center py-8">
-                  <User size={48} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
-                  <Text className="text-gray-500 dark:text-zinc-400 mt-4 text-center">
-                    Nenhum membro encontrado neste departamento
-                  </Text>
+
+                <View className="flex-row gap-3">
+                    <TouchableOpacity 
+                        onPress={() => setConfirmModalVisible(false)}
+                        className="flex-1 bg-gray-100 dark:bg-zinc-800 py-3 rounded-xl"
+                        disabled={confirmConfig.loading}
+                    >
+                        <Text className="text-gray-700 dark:text-zinc-300 font-semibold text-center">Cancelar</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                        onPress={handleConfirmAction}
+                        className={`flex-1 py-3 rounded-xl flex-row justify-center items-center ${confirmConfig.isDestructive ? 'bg-red-600' : 'bg-blue-600'}`}
+                        disabled={confirmConfig.loading}
+                    >
+                        {confirmConfig.loading ? (
+                            <ActivityIndicator size="small" color="white" />
+                        ) : (
+                            <Text className="text-white font-semibold text-center">
+                                {confirmConfig.isDestructive ? 'Excluir' : 'Confirmar'}
+                            </Text>
+                        )}
+                    </TouchableOpacity>
                 </View>
-              )}
             </View>
+        </View>
+      </Modal>
+      {/* ------------------------------------- */}
+
+      {/* Outros Modais (Criação) */}
+      <Modal visible={showSubDepartmentModal} transparent animationType="slide" onRequestClose={() => setShowSubDepartmentModal(false)}>
+        <View className="flex-1 bg-black/50 justify-end">
+          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6">
+            <View className="flex-row justify-between mb-4"><Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Novo Sub-departamento</Text><TouchableOpacity onPress={() => setShowSubDepartmentModal(false)}><Text className="text-gray-500 text-lg">✕</Text></TouchableOpacity></View>
+            <TextInput className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 mb-4" placeholder="Nome" placeholderTextColor={placeholderColor} value={newSubDepartmentName} onChangeText={setNewSubDepartmentName} />
+            <TouchableOpacity onPress={handleCreateSubDepartment} className="bg-indigo-600 rounded-lg py-4 mb-3"><Text className="text-white text-center font-bold">Criar</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
+        <View className="flex-1 bg-black/50 justify-end">
+          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6">
+            <View className="flex-row justify-between mb-4"><Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Nova Função</Text><TouchableOpacity onPress={() => setShowModal(false)}><Text className="text-gray-500 text-lg">✕</Text></TouchableOpacity></View>
+            <TextInput className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 mb-4" placeholder="Nome da Função" placeholderTextColor={placeholderColor} value={newFunctionName} onChangeText={setNewFunctionName} />
+            <TouchableOpacity onPress={handleCreateFunction} className="bg-blue-600 rounded-lg py-4 mb-3"><Text className="text-white text-center font-bold">Criar</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
