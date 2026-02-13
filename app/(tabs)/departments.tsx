@@ -116,13 +116,13 @@ export default function DepartmentsScreen() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 dark:bg-zinc-950">
-      <View className="p-4">
-        <View className="flex-row items-center justify-between mb-4">
-          <Text className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Departamentos</Text>
+      <View className="py-4">
+        <View className="flex-row items-center justify-between mb-10 border-b border-gray-200 dark:border-zinc-700 pb-4 px-4">
+          <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Departamentos</Text>
           {isMaster && (
             <TouchableOpacity
               onPress={() => router.push('/create-department')}
-              className="bg-blue-600 rounded-lg px-4 py-2.5 flex-row items-center shadow-sm"
+              className="bg-blue-600 rounded-lg px-2.5 py-2.5 flex-row items-center shadow-sm"
             >
               <Plus size={18} color="white" style={{ marginRight: 6 }} />
               <Text className="text-white font-semibold text-sm">Criar Departamento</Text>
@@ -140,7 +140,7 @@ export default function DepartmentsScreen() {
             {departments.map((dept) => (
               <View
                 key={dept.id}
-                className="bg-white dark:bg-zinc-900 rounded-xl p-4 mb-4 shadow-sm border border-gray-200 dark:border-zinc-800 flex-row items-center justify-between"
+                className="bg-white dark:bg-zinc-900 rounded-xl p-4 mb-4 shadow-sm border border-gray-200 dark:border-zinc-800 flex-row items-center justify-between mx-4"
               >
                 <TouchableOpacity
                   onPress={() => router.push(`/(tabs)/departments/${dept.id}`)}
