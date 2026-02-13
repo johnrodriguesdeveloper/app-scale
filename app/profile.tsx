@@ -2,7 +2,8 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityInd
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, LogOut, Camera, User } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
+// import * as ImagePicker from 'expo-image-picker'; // Desativado temporariamente
+// import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
 
 interface Profile {
@@ -14,7 +15,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+  // const [uploading, setUploading] = useState(false);
   const [editingName, setEditingName] = useState('');
 
   useEffect(() => {
@@ -38,232 +39,88 @@ export default function ProfileScreen() {
         setEditingName(data.full_name || '');
       }
     } catch (error) {
-      console.error('Erro ao buscar perfil:', error);
-      Alert.alert('Erro', 'Não foi possível carregar seu perfil.');
+      console.log(error);
     } finally {
       setLoading(false);
     }
   };
 
+  /* FUNCIONALIDADE DE UPLOAD PAUSADA (ERRO DE CORS NA WEB)
   const handleImageUpload = async () => {
-    try {
-      // Solicitar permissão e selecionar imagem
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-        base64: true,
-      });
-
-      if (result.canceled || !result.assets[0]) return;
-
-      const asset = result.assets[0];
-      setUploading(true);
-
-      // Obter usuário atual
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Gerar nome único para o arquivo
-      const fileExt = asset.uri.split('.').pop() || 'jpg';
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-
-      // Converter base64 para ArrayBuffer
-      const base64Data = asset.base64;
-      if (!base64Data) throw new Error('Imagem inválida');
-
-      // Decodificar base64
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      // Fazer upload para o Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, bytes, {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Obter URL pública
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-
-      // Atualizar perfil com nova URL
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl })
-        .eq('user_id', user.id);
-
-      if (updateError) throw updateError;
-
-      // Atualizar estado local
-      setProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : null);
-      Alert.alert('Sucesso', 'Foto de perfil atualizada!');
-
-    } catch (error) {
-      console.error('Erro ao fazer upload:', error);
-      Alert.alert('Erro', 'Não foi possível atualizar sua foto de perfil.');
-    } finally {
-      setUploading(false);
-    }
+     // ... código antigo ...
   };
+  */
 
   const handleSaveProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({ full_name: editingName.trim() })
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      setProfile(prev => prev ? { ...prev, full_name: editingName.trim() } : null);
-      Alert.alert('Sucesso', 'Seu nome foi atualizado!');
-
+      await supabase.from('profiles').update({ full_name: editingName.trim() }).eq('user_id', user.id);
+      Alert.alert('Sucesso', 'Nome atualizado!');
     } catch (error) {
-      console.error('Erro ao salvar perfil:', error);
-      Alert.alert('Erro', 'Não foi possível salvar suas alterações.');
+      Alert.alert('Erro', 'Falha ao salvar.');
     }
   };
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Sair',
-      'Tem certeza que deseja sair da sua conta?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sair',
-          style: 'destructive',
-          onPress: async () => {
-            await supabase.auth.signOut();
-            router.replace('/(auth)/login');
-          },
-        },
-      ]
-    );
+    await supabase.auth.signOut();
+    router.replace('/(auth)/login');
   };
 
   const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+    return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  if (loading) {
-    return (
-      <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center">
-        <ActivityIndicator size="large" color="#4f46e5" />
-        <Text className="text-gray-500 dark:text-zinc-400 mt-2">Carregando...</Text>
-      </View>
-    );
-  }
+  if (loading) return <ActivityIndicator size="large" className="flex-1" />;
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
-      {/* Header */}
       <View className="bg-white dark:bg-zinc-900 px-4 pt-12 pb-4 border-b border-gray-200 dark:border-zinc-800">
         <View className="flex-row items-center justify-between">
-          <TouchableOpacity onPress={() => router.back()} className="p-2 rounded-lg bg-gray-100">
-            <ArrowLeft size={20} color="#374151" />
+          <TouchableOpacity onPress={() => router.back()} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-lg">
+            <ArrowLeft size={20} className="text-gray-700 dark:text-zinc-300" />
           </TouchableOpacity>
-          
           <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Meu Perfil</Text>
-          
-          <TouchableOpacity onPress={handleLogout} className="p-2 rounded-lg bg-red-50">
-            <LogOut size={20} color="#ef4444" />
+          <TouchableOpacity onPress={handleLogout} className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+            <LogOut size={20} className="text-red-600 dark:text-red-400" />
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView className="flex-1 p-6">
-        {/* Avatar */}
         <View className="items-center mb-8">
-          <TouchableOpacity 
-            onPress={handleImageUpload}
-            className="relative"
-            disabled={uploading}
-          >
+          {/* Botão desativado visualmente */}
+          <View className="relative opacity-80">
             {profile?.avatar_url ? (
-              <Image
-                source={{ uri: profile.avatar_url }}
-                className="w-24 h-24 rounded-full"
-              />
+              <Image source={{ uri: profile.avatar_url }} className="w-24 h-24 rounded-full border-4 border-white dark:border-zinc-800" />
             ) : (
-              <View className="w-24 h-24 bg-gray-300 dark:bg-zinc-700 rounded-full items-center justify-center">
-                <Text className="text-2xl font-bold text-gray-600 dark:text-zinc-300">
+              <View className="w-24 h-24 bg-gray-200 dark:bg-zinc-800 rounded-full items-center justify-center border-4 border-white dark:border-zinc-800">
+                <Text className="text-2xl font-bold text-gray-500 dark:text-zinc-400">
                   {profile?.full_name ? getInitials(profile.full_name) : 'U'}
                 </Text>
               </View>
             )}
-            
-            {/* Ícone de câmera sobreposto */}
-            <View className="absolute bottom-0 right-0 bg-blue-600 rounded-full p-2 border-2 border-white">
-              {uploading ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <Camera size={16} color="white" />
-              )}
-            </View>
-          </TouchableOpacity>
-          
-          <Text className="text-gray-600 text-sm mt-3">
-            Toque para alterar a foto
-          </Text>
+            {/* Ícone de câmera removido temporariamente */}
+          </View>
+          <Text className="text-gray-400 text-xs mt-3">(Alteração de foto temporariamente indisponível)</Text>
         </View>
 
-        {/* Formulário de Dados */}
         <View className="bg-white dark:bg-zinc-900 rounded-xl p-4 border border-gray-200 dark:border-zinc-800">
-          <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-lg mb-4">Dados Pessoais</Text>
-          
+          <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100 mb-4">Dados Pessoais</Text>
           <View className="mb-4">
-            <Text className="text-gray-700 dark:text-zinc-300 text-sm font-medium mb-2">Nome Completo</Text>
-            <TextInput
-              value={editingName}
-              onChangeText={setEditingName}
-              placeholder="Seu nome completo"
-              className="border border-gray-300 dark:border-zinc-700 rounded-lg px-4 py-3 text-gray-900 dark:text-zinc-100 bg-gray-50 dark:bg-zinc-800"
-            />
+            <Text className="text-sm font-medium text-gray-700 dark:text-zinc-400 mb-2">Nome Completo</Text>
+            <View className="flex-row items-center bg-gray-50 dark:bg-zinc-950 border border-gray-200 dark:border-zinc-700 rounded-lg px-4 py-3">
+              <User size={20} className="text-gray-400 dark:text-zinc-500 mr-3" />
+              <TextInput
+                value={editingName}
+                onChangeText={setEditingName}
+                className="flex-1 text-base text-gray-900 dark:text-zinc-100"
+              />
+            </View>
           </View>
-
-          <TouchableOpacity
-            onPress={handleSaveProfile}
-            className="bg-blue-600 rounded-lg py-3 items-center"
-          >
+          <TouchableOpacity onPress={handleSaveProfile} className="bg-blue-600 py-3 rounded-lg items-center">
             <Text className="text-white font-semibold">Salvar Alterações</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Informações da Conta */}
-        <View className="bg-white dark:bg-zinc-900 rounded-xl p-4 border border-gray-200 dark:border-zinc-800 mt-4">
-          <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-lg mb-4">Informações da Conta</Text>
-          
-          <View className="space-y-3">
-            <View className="flex-row justify-between">
-              <Text className="text-gray-600 dark:text-zinc-400">Status</Text>
-              <Text className="text-green-600 dark:text-green-400 font-medium">Ativo</Text>
-            </View>
-            
-            <View className="flex-row justify-between">
-              <Text className="text-gray-600 dark:text-zinc-400">Membro desde</Text>
-              <Text className="text-gray-900 dark:text-zinc-100 font-medium">
-                {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-              </Text>
-            </View>
-          </View>
         </View>
       </ScrollView>
     </View>
