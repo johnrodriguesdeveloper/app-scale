@@ -21,13 +21,9 @@ export default function TabLayout() {
 
   const checkUserDepartment = async () => {
     try {
-      console.log('--- INICIANDO VERIFICAÇÃO DE MEMBRO ---');
-      
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('User ID:', user?.id);
       
       if (!user) {
-        console.log('Usuário não encontrado');
         setIsChecking(false);
         return;
       }
@@ -37,27 +33,19 @@ export default function TabLayout() {
         .select('*')
         .eq('user_id', user.id);
 
-      console.log('Erro Supabase:', error);
-      console.log('Dados encontrados:', data);
-      console.log('Quantidade:', data?.length);
-      console.log('--- FIM DA VERIFICAÇÃO ---');
-
       if (error) {
-        console.error('Erro na query:', error);
         setIsChecking(false);
         return;
       }
 
       if (!data || data.length === 0) {
-        console.log('Nenhum membro encontrado - Redirecionando para onboarding');
         setIsChecking(false);
         router.replace('/onboarding');
       } else {
-        console.log('Membro encontrado - Permitindo acesso');
         setIsChecking(false);
       }
     } catch (error) {
-      console.error('Erro ao verificar departamento do usuário:', error);
+      console.error('Erro ao verificar departamento:', error);
       setIsChecking(false);
     }
   };
@@ -83,6 +71,7 @@ export default function TabLayout() {
         }
       }}
     >
+      {/* 1. HOME */}
       <Tabs.Screen
         name="index"
         options={{
@@ -90,13 +79,17 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
         }}
       />
+
+      {/* 2. AGENDA (Antigo Calendário) */}
       <Tabs.Screen
-        name="calendar"
+        name="my-scales"
         options={{
-          title: 'Calendário',
+          title: 'Agenda', // <--- Mudamos o nome aqui
           tabBarIcon: ({ color, size }) => <Calendar size={size} color={color} />,
         }}
       />
+
+      {/* 3. DEPARTAMENTOS */}
       <Tabs.Screen
         name="departments"
         options={{
@@ -104,6 +97,8 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
         }}
       />
+
+      {/* --- TELAS OCULTAS (Não aparecem na barra, mas precisam estar aqui para funcionar) --- */}
       <Tabs.Screen
         name="departments/[id]"
         options={{
@@ -122,6 +117,9 @@ export default function TabLayout() {
           href: null,
         }}
       />
+      {/* ---------------------------------------------------------------------------------- */}
+
+      {/* 4. CONFIGURAÇÕES (Último item) */}
       <Tabs.Screen
         name="settings"
         options={{
