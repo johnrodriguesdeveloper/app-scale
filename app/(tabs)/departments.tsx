@@ -133,13 +133,11 @@ export default function DepartmentsScreen() {
   return (
     <ScrollView className="flex-1 bg-gray-50 dark:bg-zinc-950">
       {/* HEADER */}
-      <View className="bg-white dark:bg-zinc-900 px-6 pt-6 pb-4 border-b border-gray-200 dark:border-zinc-800 flex-row items-center justify-between">
+      <View className="bg-white dark:bg-zinc-900 p-6 border-b border-gray-200 dark:border-zinc-800 flex-row items-center justify-between">
         <View className="flex-row items-center">
           <View>
             <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Departamentos</Text>
-            <Text className="text-sm text-gray-500 dark:text-zinc-400">
-              {isAdmin ? 'Visão Geral' : 'Meus Departamentos'}
-            </Text>
+          
           </View>
         </View>
 

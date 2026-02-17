@@ -74,7 +74,6 @@ export default function ScheduleScreen() {
     setSaving(true);
     try {
       if (editingDay) {
-        // Editar dia existente
         const { error } = await supabase
           .from('service_days')
           .update({
