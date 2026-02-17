@@ -1,4 +1,4 @@
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, Linking } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -35,19 +35,22 @@ export default function LoginScreen() {
     }
   };
 
+  const openPortfolio = () => {
+    Linking.openURL('https://johnrodrigues.xyz');
+  };
+
   return (
-    // Fundo ajustado para Zinc Dark
     <View className="flex-1 bg-blue-50 dark:bg-zinc-950">
+      {/* Conteúdo Centralizado */}
       <View className="flex-1 justify-center px-6">
         
         <View className="items-center mb-12">
-          {/* O círculo azul do ícone mantém destaque, adicionada sombra suave */}
           <View className="bg-blue-600 rounded-full p-4 mb-4 shadow-lg shadow-blue-900/20">
             <LogIn size={32} color="white" />
           </View>
           
           <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-100 mb-2">
-            App Escala
+            Scale Verb
           </Text>
           <Text className="text-gray-600 dark:text-zinc-400 text-center">
             Gerencie suas escalas de forma simples
@@ -112,7 +115,6 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           {/* Link para Sign Up */}
-          {/* Botão secundário ajustado para ter fundo transparente/escuro no dark mode */}
           <TouchableOpacity
             onPress={() => router.push('/signup')}
             disabled={loading}
@@ -127,6 +129,18 @@ export default function LoginScreen() {
             </View>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Footer / Rodapé */}
+      <View className="pb-8 items-center justify-end px-6">
+        <Text className="text-gray-400 dark:text-zinc-600 text-xs mb-1">
+          Versão 1.0.0
+        </Text>
+        <TouchableOpacity onPress={openPortfolio}>
+          <Text className="text-gray-500 dark:text-zinc-500 text-xs">
+            Developed by <Text className="text-blue-600 dark:text-zinc-400 font-bold">John Rodrigues</Text>
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

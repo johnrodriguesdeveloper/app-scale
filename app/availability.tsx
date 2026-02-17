@@ -1,10 +1,11 @@
 import { View, Text, Switch, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react-native';
+import { ArrowLeft, ChevronLeft, ChevronRight, AlertCircle, Info } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, getDate } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { getTargetMonthDate } from '@/utils/getTargetMonthDate';
 
 interface ServiceDay {
   id: string;
@@ -31,9 +32,9 @@ const fullDayNames = [
 
 export default function AvailabilityRoutineScreen() {
   const router = useRouter();
-  
-  // Data mínima: próximo mês
-  const minDate = startOfMonth(addMonths(new Date(), 1));
+
+  const minDate = getTargetMonthDate(); 
+
 
   const [currentMonth, setCurrentMonth] = useState(minDate);
   const [serviceDays, setServiceDays] = useState<ServiceDay[]>([]);
@@ -56,7 +57,7 @@ export default function AvailabilityRoutineScreen() {
     }
   }, [currentMonth, serviceDays]);
 
-  // 3. O SEGREDO: Recalcula o visual sempre que qualquer dado mudar (Rotina ou Exceção)
+  // 3. Recalcula o visual sempre que dados mudam
   useEffect(() => {
     if (serviceDays.length > 0) {
       const start = startOfMonth(currentMonth);
@@ -107,8 +108,6 @@ export default function AvailabilityRoutineScreen() {
         .lte('specific_date', end.toISOString());
 
       if (data) setMonthExceptions(data);
-      
-      // Nota: Não chamamos generateExpandedCalendar aqui, o useEffect cuida disso
 
     } catch (error) {
       console.error(error);
@@ -120,7 +119,7 @@ export default function AvailabilityRoutineScreen() {
     end: Date, 
     services: ServiceDay[], 
     exceptions: AvailabilityException[],
-    currentAvailability: AvailabilityRoutine[] // Recebe a rotina atualizada
+    currentAvailability: AvailabilityRoutine[]
   ) => {
     const daysInterval = eachDayOfInterval({ start, end });
     const calendarItems: any[] = [];
@@ -130,18 +129,15 @@ export default function AvailabilityRoutineScreen() {
       const daysServices = services.filter(s => s.day_of_week === dayOfWeek);
 
       daysServices.forEach(service => {
-        // Status Padrão (Rotina) - Usa a variável atualizada
         const routine = currentAvailability.find(r => r.service_day_id === service.id);
         const isRoutineAvailable = routine ? routine.is_available : true; 
 
-        // Status Exceção
         const dateStr = format(date, 'yyyy-MM-dd');
         const exception = exceptions.find(e => 
           e.specific_date === dateStr && 
           (e.service_day_id === service.id || e.service_day_id === null)
         );
 
-        // A Lógica: Se tem exceção, ela manda. Se não, manda a rotina.
         const finalStatus = exception ? exception.is_available : isRoutineAvailable;
 
         calendarItems.push({
@@ -166,7 +162,6 @@ export default function AvailabilityRoutineScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Atualização Otimista (Visual instantâneo)
       const optimisticException = {
         user_id: user.id,
         specific_date: item.dateStr,
@@ -175,14 +170,12 @@ export default function AvailabilityRoutineScreen() {
       };
 
       setMonthExceptions(prev => {
-        // Remove antiga se existir e adiciona nova
         const filtered = prev.filter(e => 
           !(e.specific_date === item.dateStr && e.service_day_id === item.service.id)
         );
         return [...filtered, optimisticException];
       });
 
-      // Atualiza Banco
       const { error } = await supabase
         .from('availability_exceptions')
         .upsert(optimisticException, {
@@ -193,7 +186,6 @@ export default function AvailabilityRoutineScreen() {
 
     } catch (error) {
       Alert.alert("Erro", "Não foi possível salvar.");
-      // Rollback se der erro (recarrega do banco)
       loadMonthExceptions();
     } finally {
       setSaving(prev => ({ ...prev, [itemKey]: false }));
@@ -205,24 +197,22 @@ export default function AvailabilityRoutineScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
-      // 1. Atualiza visualmente IMEDIATAMENTE (Otimista)
       setAvailability(prev => {
         const filtered = prev.filter(a => a.service_day_id !== serviceDayId);
         return [...filtered, { user_id: user.id, service_day_id: serviceDayId, is_available: value }];
       });
 
-      // 2. Salva no banco em segundo plano
       await supabase.from('availability_routine').upsert({
         user_id: user.id, service_day_id: serviceDayId, is_available: value
       }, { onConflict: 'user_id,service_day_id' });
       
     } catch (e) { 
       console.error(e); 
-      // Se der erro, poderíamos reverter aqui, mas loadData na montagem garante consistência
     }
   };
 
   const isAtMinDate = isSameDay(startOfMonth(currentMonth), minDate);
+  const dayOfMonth = getDate(new Date());
 
   if (loading) return <View className="flex-1 items-center justify-center bg-white dark:bg-zinc-900"><ActivityIndicator color="#2563eb"/></View>;
 
@@ -239,11 +229,26 @@ export default function AvailabilityRoutineScreen() {
 
         <ScrollView className="flex-1 p-4">
           
-          {/* Aviso */}
+          {/* Aviso de Regra de Disponibilidade (Aparece se passou do dia 20) */}
+          {dayOfMonth > 20 && (
+            <View className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 mb-4 border border-blue-200 dark:border-blue-800 flex-row items-start">
+               <Info size={18} color="#2563eb" style={{marginTop: 2, marginRight: 8}}/>
+               <View className="flex-1">
+                 <Text className="text-blue-900 dark:text-blue-100 font-bold text-xs mb-1">
+                   Período de escala fechado
+                 </Text>
+                 <Text className="text-blue-800 dark:text-blue-200 text-xs">
+                   Como hoje é dia {dayOfMonth} (passou do dia 20), a escala do próximo mês já está sendo fechada. Você está definindo a disponibilidade para o mês subsequente.
+                 </Text>
+               </View>
+            </View>
+          )}
+
+          {/* Aviso Padrão */}
           <View className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 mb-6 border border-amber-200 dark:border-amber-700 flex-row items-center justify-center">
              <AlertCircle size={16} color="#92400e" className="mr-2"/>
              <Text className="text-amber-900 dark:text-amber-100 font-medium text-xs">
-               Ajustes aqui sobrepõem a rotina padrão.
+               Ajustes abaixo sobrepõem a rotina padrão.
              </Text>
           </View>
 
@@ -333,9 +338,9 @@ export default function AvailabilityRoutineScreen() {
                    <ActivityIndicator size="small" color="#2563eb" />
                  ) : (
                    <Switch 
-                      value={item.isAvailable} 
-                      onValueChange={(val) => handleToggleException(item, val)}
-                      trackColor={{ false: '#ef4444', true: '#10b981' }}
+                     value={item.isAvailable} 
+                     onValueChange={(val) => handleToggleException(item, val)}
+                     trackColor={{ false: '#ef4444', true: '#10b981' }}
                    />
                  )}
               </View>

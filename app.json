@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "App Escala",
+    "name": "Scale verb",
     "slug": "app-escala",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -26,7 +26,8 @@
       "package": "com.appescala.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "lang": "pt-BR"
     },
     "plugins": [
       "expo-router",

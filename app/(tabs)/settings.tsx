@@ -1,4 +1,4 @@
-import { View, Text, Switch, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, Switch, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { Moon, Sun, User, Bell, ChevronRight, LogOut, Palette } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
@@ -15,6 +15,9 @@ export default function SettingsScreen() {
     await supabase.auth.signOut();
     router.replace('/(auth)/login');
   }
+   const openPortfolio = () => {
+      Linking.openURL('https://johnrodrigues.xyz');
+    };
 
   // --- NOVA FUNÇÃO DE TOGGLE COM SAVE ---
   const handleToggle = async () => {
@@ -105,9 +108,20 @@ export default function SettingsScreen() {
 
         </View>
 
-        <Text className="text-center text-gray-400 dark:text-zinc-600 text-xs mt-10">Versão 1.0.0</Text>
-
+        
       </ScrollView>
+
+      <View className="pb-8 items-center justify-end px-6">
+        <Text className="text-gray-400 dark:text-zinc-600 text-xs mb-1">
+          Versão 1.0.0
+        </Text>
+        <TouchableOpacity onPress={openPortfolio}>
+          <Text className="text-gray-500 dark:text-zinc-500 text-xs">
+            Developed by <Text className="text-blue-600 dark:text-zinc-400 font-bold">John Rodrigues</Text>
+          </Text>
+        </TouchableOpacity>
+      </View>
+
     </View>
   );
 }
