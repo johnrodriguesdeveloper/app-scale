@@ -1,17 +1,42 @@
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Modal } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { UserPlus, Mail, Lock, User, ArrowLeft } from 'lucide-react-native';
+import { UserPlus, Mail, Lock, User, ArrowLeft, CheckCircle, AlertTriangle } from 'lucide-react-native';
+import { useColorScheme } from 'nativewind';
 
 export default function SignUpScreen() {
   const router = useRouter();
+  const { colorScheme } = useColorScheme();
+  
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   
+  // --- ESTADOS DO MODAL ---
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalConfig, setModalConfig] = useState({
+    type: 'success' as 'success' | 'error',
+    title: '',
+    message: ''
+  });
+
+  const showModal = (type: 'success' | 'error', title: string, message: string) => {
+    setModalConfig({ type, title, message });
+    setModalVisible(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalVisible(false);
+    // Se foi sucesso, redireciona para login ao fechar o modal
+    if (modalConfig.type === 'success') {
+      router.replace('/login');
+    }
+  };
+  // ------------------------
+
   // Estados de erro para validação
   const [errors, setErrors] = useState({
     fullName: '',
@@ -83,7 +108,7 @@ export default function SignUpScreen() {
     validateField('confirmPassword', confirmPassword);
 
     if (!isFormValid()) {
-      Alert.alert('Erro', 'Por favor, corrija os erros no formulário');
+      showModal('error', 'Formulário Inválido', 'Por favor, corrija os erros indicados.');
       return;
     }
 
@@ -100,28 +125,22 @@ export default function SignUpScreen() {
       });
 
       if (error) {
-        Alert.alert('Erro ao criar conta', error.message);
+        showModal('error', 'Erro ao Criar Conta', error.message);
       } else {
-        Alert.alert(
-          'Conta criada!',
-          'Verifique seu email para confirmar a conta antes de fazer login.',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.replace('/login'),
-            },
-          ]
+        showModal(
+          'success', 
+          'Conta Criada!', 
+          'Verifique seu email para confirmar o cadastro antes de fazer login.'
         );
       }
     } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Ocorreu um erro inesperado');
+      showModal('error', 'Erro Inesperado', error.message || 'Ocorreu um erro ao tentar criar a conta.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    // Fundo ajustado para Zinc Dark
     <ScrollView className="flex-1 bg-gray-50 dark:bg-zinc-950">
       <View className="flex-1 justify-center px-6 py-12">
         {/* Header */}
@@ -266,6 +285,47 @@ export default function SignUpScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* --- MODAL DE FEEDBACK --- */}
+      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={handleCloseModal}>
+        <View className="flex-1 bg-black/60 justify-center items-center p-4">
+          <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
+            
+            <View className="items-center mb-4">
+              <View className={`w-14 h-14 rounded-full items-center justify-center mb-4 ${
+                modalConfig.type === 'success' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
+              }`}>
+                {modalConfig.type === 'success' ? (
+                  <CheckCircle size={32} color={colorScheme === 'dark' ? '#4ade80' : '#16a34a'} />
+                ) : (
+                  <AlertTriangle size={32} color={colorScheme === 'dark' ? '#ef4444' : '#dc2626'} />
+                )}
+              </View>
+
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 text-center mb-2">
+                {modalConfig.title}
+              </Text>
+              
+              <Text className="text-gray-500 dark:text-zinc-400 text-center text-base px-2">
+                {modalConfig.message}
+              </Text>
+            </View>
+
+            <TouchableOpacity 
+              onPress={handleCloseModal}
+              className={`py-3 rounded-xl w-full ${
+                modalConfig.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+              }`}
+            >
+              <Text className="text-white font-bold text-center text-lg">
+                {modalConfig.type === 'success' ? 'Ir para Login' : 'Entendi'}
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+        </View>
+      </Modal>
+      
     </ScrollView>
   );
 }

@@ -363,14 +363,22 @@ export default function MemberListScreen() {
     );
   };
 
-  if (loading) return <View className="flex-1 items-center justify-center"><ActivityIndicator color="#2563eb"/></View>;
+  if (loading) return <View className="flex-1 items-center justify-center dark:bg-zinc-900"><ActivityIndicator color="#2563eb"/></View>;
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
       
-      {/* HEADER ATUALIZADO */}
-      <View className="bg-white dark:bg-zinc-900 px-4 pt-12 pb-4 border-b border-gray-200 dark:border-zinc-800 flex-row items-center">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3 p-2 bg-gray-100 dark:bg-zinc-800 rounded-lg">
+    
+      <View className="bg-white dark:bg-zinc-900 px-4 py-6 border-b border-gray-200 dark:border-zinc-800 flex-row items-center">
+        <TouchableOpacity 
+          onPress={() => {
+              router.push({
+                  pathname: '/(tabs)/departments/[id]',
+                  params: { id: id }
+              });
+          }} 
+          className="mr-3 p-2 bg-gray-100 dark:bg-zinc-800 rounded-lg"
+        >
           <ArrowLeft size={20} color={iconColor} />
         </TouchableOpacity>
         <View>
