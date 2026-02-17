@@ -23,7 +23,7 @@ export default function DepartmentDetailsScreen() {
   const [isLeader, setIsLeader] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // Modais de Criação
+  // Modais
   const [showModal, setShowModal] = useState(false);
   const [newFunctionName, setNewFunctionName] = useState('');
   const [savingFunction, setSavingFunction] = useState(false);
@@ -32,7 +32,7 @@ export default function DepartmentDetailsScreen() {
   const [savingSubDepartment, setSavingSubDepartment] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
 
-  // --- NOVO: ESTADO DO MODAL DE CONFIRMAÇÃO ---
+  // Estados do Modal de Confirmação
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
     title: '',
@@ -42,75 +42,57 @@ export default function DepartmentDetailsScreen() {
     loading: false
   });
 
-  // Função auxiliar para abrir o modal de confirmação
+  // --- LÓGICA DE VOLTAR INTELIGENTE E DEFINITIVA ---
+  const handleBack = () => {
+    if (department?.parent_id) {
+      // 1. É sub-departamento: Força a volta para o departamento pai
+      router.push({ 
+        pathname: '/(tabs)/departments/[id]', 
+        params: { id: department.parent_id } 
+      });
+    } else {
+      // 2. É departamento raiz: Força a volta para a ABA DE DEPARTAMENTOS
+      router.push('/(tabs)/departments');
+    }
+  };
+  // ------------------------------------------------
+
   const requestConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, isDestructive = false) => {
-    setConfirmConfig({
-      title,
-      message,
-      onConfirm,
-      isDestructive,
-      loading: false
-    });
+    setConfirmConfig({ title, message, onConfirm, isDestructive, loading: false });
     setConfirmModalVisible(true);
   };
 
-const handleConfirmAction = async () => {
-    // 1. Ativa loading
+  const handleConfirmAction = async () => {
     setConfirmConfig(prev => ({ ...prev, loading: true }));
-    
     try {
-      // 2. Tenta executar a ação
       await confirmConfig.onConfirm();
-      // 3. Se deu certo, fecha o modal
       setConfirmModalVisible(false);
     } catch (error: any) {
       console.error('Erro na confirmação:', error);
-      // 4. Mostra alerta se der erro
-      Alert.alert('Erro', error.message || 'Não foi possível completar a ação.');
+      Alert.alert('Erro', error.message || 'Falha na ação.');
     } finally {
-      // 5. Desativa loading
       setConfirmConfig(prev => ({ ...prev, loading: false }));
     }
   };
-  // ---------------------------------------------
 
   const fetchFunctions = async (departmentId: string) => {
-    const { data: deptFunctions } = await supabase
-      .from('department_functions')
-      .select('id, name, description')
-      .eq('department_id', departmentId)
-      .order('name');
-    if (deptFunctions) setFunctions(deptFunctions);
+    const { data } = await supabase.from('department_functions').select('id, name, description').eq('department_id', departmentId).order('name');
+    if (data) setFunctions(data);
   };
 
   const fetchSubDepartments = async (departmentId: string) => {
-    const { data: children } = await supabase
-      .from('departments')
-      .select('id, name, description, parent_id')
-      .eq('parent_id', departmentId)
-      .order('name');
-    if (children) setSubDepartments(children);
+    const { data } = await supabase.from('departments').select('id, name, description, parent_id').eq('parent_id', departmentId).order('name');
+    if (data) setSubDepartments(data);
   };
 
   const fetchParentDepartment = async (parentId: string) => {
-    const { data: parent } = await supabase
-      .from('departments')
-      .select('id, name')
-      .eq('id', parentId)
-      .single();
-    if (parent) setParentDepartment(parent);
+    const { data } = await supabase.from('departments').select('id, name').eq('id', parentId).single();
+    if (data) setParentDepartment(data);
   };
 
   const fetchMembers = async (departmentId: string) => {
-    const { data: deptMembers } = await supabase
-      .from('department_members')
-      .select(`
-        id, user_id, dept_role,
-        profiles:user_id ( full_name, email, avatar_url ),
-        department_functions:function_id ( name )
-      `)
-      .eq('department_id', departmentId);
-    if (deptMembers) setMembers(deptMembers);
+    const { data } = await supabase.from('department_members').select(`id, user_id, dept_role, profiles:user_id ( full_name, email, avatar_url ), department_functions:function_id ( name )`).eq('department_id', departmentId);
+    if (data) setMembers(data);
   };
 
   useEffect(() => {
@@ -121,32 +103,17 @@ const handleConfirmAction = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('org_role')
-        .eq('user_id', user.id)
-        .single();
-
+      const { data: profile } = await supabase.from('profiles').select('org_role').eq('user_id', user.id).single();
       if (profile) {
         const masterStatus = profile.org_role === 'master';
         setIsMaster(masterStatus);
         setIsAdmin(profile.org_role === 'admin' || masterStatus);
       }
 
-      const { data: leaderCheck } = await supabase
-        .from('department_leaders')
-        .select('id')
-        .eq('department_id', id)
-        .eq('user_id', user.id)
-        .single();
-      
+      const { data: leaderCheck } = await supabase.from('department_leaders').select('id').eq('department_id', id).eq('user_id', user.id).single();
       if (leaderCheck) setIsLeader(true);
 
-      const { data: dept } = await supabase
-        .from('departments')
-        .select('id, name, description, priority_order, availability_deadline_day, parent_id, organization_id')
-        .eq('id', id)
-        .single();
+      const { data: dept } = await supabase.from('departments').select('id, name, description, priority_order, availability_deadline_day, parent_id, organization_id').eq('id', id).single();
 
       if (dept) {
         setDepartment(dept);
@@ -161,138 +128,59 @@ const handleConfirmAction = async () => {
     loadData();
   }, [id]);
 
-  // --- AÇÕES COM O NOVO MODAL ---
-
-const handleRemoveMember = (memberId: string, memberName: string) => {
-    requestConfirmation(
-      'Remover Membro',
-      `ATENÇÃO: '${memberName}' possui escalas agendadas.\n\nAo remover este membro, TODAS as escalas futuras e passadas dele neste departamento também serão apagadas.\n\nDeseja continuar?`,
-      async () => {
-        // 1. Primeiro: Apagar as escalas (rosters) desse membro
-        // Isso resolve o erro de Foreign Key (23503)
-        const { error: rosterError } = await supabase
-          .from('rosters')
-          .delete()
-          .eq('member_id', memberId);
-
-        if (rosterError) {
-            console.error('Erro ao limpar escalas:', rosterError);
-            throw new Error('Falha ao limpar as escalas do membro.');
-        }
-
-        // 2. Segundo: Agora sim, apagar o membro
-        const { error } = await supabase
-          .from('department_members')
-          .delete()
-          .eq('id', memberId);
-
-        if (error) throw error;
-
-        // 3. Atualizar a tela instantaneamente
-        setMembers(prevMembers => prevMembers.filter(m => m.id !== memberId));
-      },
-      true // Botão vermelho (Destrutivo)
-    );
+  // Ações de Remover
+  const handleRemoveMember = (memberId: string, memberName: string) => {
+    requestConfirmation('Remover Membro', `ATENÇÃO: '${memberName}' possui escalas? Elas serão apagadas.`, async () => {
+      await supabase.from('rosters').delete().eq('member_id', memberId);
+      await supabase.from('department_members').delete().eq('id', memberId);
+      setMembers(prev => prev.filter(m => m.id !== memberId));
+    }, true);
   };
 
   const handleDeleteSubDepartment = (subDeptId: string, subDeptName: string) => {
-    requestConfirmation(
-      'Excluir Sub-departamento',
-      `Ao excluir '${subDeptName}', você removerá todos os vínculos de membros e escalas associados.`,
-      async () => {
-        const { error } = await supabase.from('departments').delete().eq('id', subDeptId);
-        if (error) Alert.alert('Erro', 'Verifique se há dependências antes de excluir.');
-        else {
-          setSubDepartments((prev) => prev.filter((sub) => sub.id !== subDeptId));
-          await fetchSubDepartments(String(id));
-        }
-      },
-      true
-    );
+    requestConfirmation('Excluir Sub-departamento', `Excluir '${subDeptName}'?`, async () => {
+      const { error } = await supabase.from('departments').delete().eq('id', subDeptId);
+      if (error) throw error;
+      setSubDepartments(prev => prev.filter(s => s.id !== subDeptId));
+    }, true);
   };
 
-const handleDeleteFunction = (funcId: string, funcName: string) => {
-    requestConfirmation(
-      'Excluir Função',
-      `Deseja excluir a função '${funcName}' permanentemente?`,
-      async () => {
-        const { error } = await supabase
-          .from('department_functions')
-          .delete()
-          .eq('id', funcId);
-
-        if (error) throw error;
-
-        // Atualiza a tela na hora
-        setFunctions(prev => prev.filter(f => f.id !== funcId));
-      },
-      true
-    );
+  const handleDeleteFunction = (funcId: string, funcName: string) => {
+    requestConfirmation('Excluir Função', `Excluir '${funcName}'?`, async () => {
+      const { error } = await supabase.from('department_functions').delete().eq('id', funcId);
+      if (error) throw error;
+      setFunctions(prev => prev.filter(f => f.id !== funcId));
+    }, true);
   };
 
-  // const handleDeleteDepartment = () => {
-  // //   if (!id) return;
-  // //   requestConfirmation(
-  // //     'Apagar Departamento',
-  // //     'Tem certeza absoluta? Esta ação apagará o departamento e todos os seus dados. Não pode ser desfeita.',
-  // //     async () => {
-  // //       setDeletingDepartment(true);
-  // //       try {
-  // //           const { error } = await supabase.from('departments').delete().eq('id', String(id));
-  // //           if (error) throw error;
-  // //           if (router.canGoBack()) router.back();
-  // //           else router.push('/(tabs)/departments');
-  // //       } catch (error: any) {
-  // //           Alert.alert('Erro', error.message);
-  // //       } finally {
-  // //           setDeletingDepartment(false);
-  // //       }
-  // //     },
-  // //     true
-  // //   );
-  // // };
-
-  // --- CRIAÇÃO ---
-
+  // Ações de Criar
   const handleCreateFunction = async () => {
-    if (!newFunctionName.trim() || !id) return Alert.alert('Erro', 'Preencha o nome');
+    if (!newFunctionName.trim() || !id) return Alert.alert('Erro', 'Nome inválido');
     setSavingFunction(true);
     try {
-      const { error } = await supabase.from('department_functions').insert({
-        department_id: id,
-        name: newFunctionName.trim(),
-      });
+      const { error } = await supabase.from('department_functions').insert({ department_id: id, name: newFunctionName.trim() });
       if (error) throw error;
       setShowModal(false);
       setNewFunctionName('');
       await fetchFunctions(String(id));
-    } catch (error: any) {
-      Alert.alert('Erro', error.message);
-    } finally {
-      setSavingFunction(false);
-    }
+    } catch (e: any) { Alert.alert('Erro', e.message); } finally { setSavingFunction(false); }
   };
 
   const handleCreateSubDepartment = async () => {
-    if (!newSubDepartmentName.trim() || !id) return Alert.alert('Erro', 'Preencha o nome');
+    if (!newSubDepartmentName.trim() || !id) return Alert.alert('Erro', 'Nome inválido');
     setSavingSubDepartment(true);
     try {
       const { error } = await supabase.from('departments').insert({
         name: newSubDepartmentName.trim(),
         parent_id: String(id),
         organization_id: department.organization_id,
-        availability_deadline_day: department.availability_deadline_day || 20,
-        priority_order: 99,
+        priority_order: 99
       });
       if (error) throw error;
       setShowSubDepartmentModal(false);
       setNewSubDepartmentName('');
       await fetchSubDepartments(String(id));
-    } catch (error: any) {
-      Alert.alert('Erro', error.message);
-    } finally {
-      setSavingSubDepartment(false);
-    }
+    } catch (e: any) { Alert.alert('Erro', e.message); } finally { setSavingSubDepartment(false); }
   };
 
   if (loading) return <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center"><ActivityIndicator size="large" color="#3b82f6" /></View>;
@@ -303,8 +191,8 @@ const handleDeleteFunction = (funcId: string, funcName: string) => {
       <ScrollView className="flex-1 bg-gray-50 dark:bg-zinc-950">
         {/* Header */}
         <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 py-3 flex-row items-center">
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/(tabs)/departments')} className="mr-4">
-            <ArrowLeft size={24} color={iconColor} />
+          <TouchableOpacity onPress={handleBack} className="mr-4 p-2 bg-gray-100 dark:bg-zinc-800 rounded-lg">
+            <ArrowLeft size={20} color={iconColor} />
           </TouchableOpacity>
           <View className="flex-1">
             <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">{department.name}</Text>
@@ -323,19 +211,12 @@ const handleDeleteFunction = (funcId: string, funcName: string) => {
           {(isAdmin || isMaster || isLeader) && (
             <View className="mb-6 flex-row gap-3">
               {(isAdmin || isMaster) && (
-                <TouchableOpacity
-                  onPress={() => router.push({ pathname: '/department-leaders', params: { departmentId: String(id), departmentName: department?.name } })}
-                  className="flex-1 bg-amber-600 rounded-xl px-4 py-3 flex-row items-center justify-center shadow-sm active:bg-amber-700"
-                >
+                <TouchableOpacity onPress={() => router.push({ pathname: '/department-leaders', params: { departmentId: String(id), departmentName: department?.name } })} className="flex-1 bg-amber-600 rounded-xl px-4 py-3 flex-row items-center justify-center shadow-sm">
                   <Shield size={20} color="white" style={{ marginRight: 8 }} />
                   <Text className="text-white font-bold">Liderança</Text>
                 </TouchableOpacity>
               )}
-              
-              <TouchableOpacity
-                onPress={() => router.push({ pathname: '/department-roster', params: { departmentId: String(id), departmentName: department.name } })}
-                className="flex-1 bg-blue-600 rounded-xl px-4 py-3 flex-row items-center justify-center shadow-sm active:bg-blue-700"
-              >
+              <TouchableOpacity onPress={() => router.push({ pathname: '/department-roster', params: { departmentId: String(id), departmentName: department.name } })} className="flex-1 bg-blue-600 rounded-xl px-4 py-3 flex-row items-center justify-center shadow-sm">
                 <Calendar size={20} color="white" style={{ marginRight: 8 }} />
                 <Text className="text-white font-bold">Escala</Text>
               </TouchableOpacity>
@@ -361,8 +242,11 @@ const handleDeleteFunction = (funcId: string, funcName: string) => {
               {subDepartments.length > 0 ? (
                 <View>
                   {subDepartments.map((child, index) => (
-                    <View key={child.id} className={`bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 flex-row items-center ${index !== subDepartments.length - 1 ? 'mb-3' : ''}`}>
-                      <TouchableOpacity className="flex-1 flex-row items-center" onPress={() => router.push({ pathname: '/departments/[id]', params: { id: String(child.id) } })}>
+                    <View key={child.id} className={`bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-zinc-800 rounded-xl p-4 flex-row items-center ${index !== subDepartments.length - 1 ? 'mb-3' : ''}`}>
+                      <TouchableOpacity 
+                        className="flex-1 flex-row items-center" 
+                        onPress={() => router.push({ pathname: '/(tabs)/departments/[id]', params: { id: String(child.id) } })}
+                      >
                         <View className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 items-center justify-center mr-3">
                             <Folder size={20} color="#4f46e5" />
                         </View>
@@ -481,7 +365,7 @@ const handleDeleteFunction = (funcId: string, funcName: string) => {
         </View>
       </ScrollView>
 
-      {/* --- MODAL DE CONFIRMAÇÃO GENÉRICO --- */}
+      {/* Modal Genérico de Confirmação */}
       <Modal visible={confirmModalVisible} transparent animationType="fade" onRequestClose={() => setConfirmModalVisible(false)}>
         <View className="flex-1 bg-black/60 justify-center items-center p-4">
             <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
@@ -493,41 +377,20 @@ const handleDeleteFunction = (funcId: string, funcName: string) => {
                             <Shield size={24} color={colorScheme === 'dark' ? '#3b82f6' : '#2563eb'} />
                         )}
                     </View>
-                    <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 text-center mb-2">
-                        {confirmConfig.title}
-                    </Text>
-                    <Text className="text-gray-500 dark:text-zinc-400 text-center text-base">
-                        {confirmConfig.message}
-                    </Text>
+                    <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 text-center mb-2">{confirmConfig.title}</Text>
+                    <Text className="text-gray-500 dark:text-zinc-400 text-center text-base">{confirmConfig.message}</Text>
                 </View>
-
                 <View className="flex-row gap-3">
-                    <TouchableOpacity 
-                        onPress={() => setConfirmModalVisible(false)}
-                        className="flex-1 bg-gray-100 dark:bg-zinc-800 py-3 rounded-xl"
-                        disabled={confirmConfig.loading}
-                    >
+                    <TouchableOpacity onPress={() => setConfirmModalVisible(false)} className="flex-1 bg-gray-100 dark:bg-zinc-800 py-3 rounded-xl" disabled={confirmConfig.loading}>
                         <Text className="text-gray-700 dark:text-zinc-300 font-semibold text-center">Cancelar</Text>
                     </TouchableOpacity>
-
-                    <TouchableOpacity 
-                        onPress={handleConfirmAction}
-                        className={`flex-1 py-3 rounded-xl flex-row justify-center items-center ${confirmConfig.isDestructive ? 'bg-red-600' : 'bg-blue-600'}`}
-                        disabled={confirmConfig.loading}
-                    >
-                        {confirmConfig.loading ? (
-                            <ActivityIndicator size="small" color="white" />
-                        ) : (
-                            <Text className="text-white font-semibold text-center">
-                                {confirmConfig.isDestructive ? 'Excluir' : 'Confirmar'}
-                            </Text>
-                        )}
+                    <TouchableOpacity onPress={handleConfirmAction} className={`flex-1 py-3 rounded-xl flex-row justify-center items-center ${confirmConfig.isDestructive ? 'bg-red-600' : 'bg-blue-600'}`} disabled={confirmConfig.loading}>
+                        {confirmConfig.loading ? <ActivityIndicator size="small" color="white" /> : <Text className="text-white font-semibold text-center">{confirmConfig.isDestructive ? 'Excluir' : 'Confirmar'}</Text>}
                     </TouchableOpacity>
                 </View>
             </View>
         </View>
       </Modal>
-      {/* ------------------------------------- */}
 
       {/* Outros Modais (Criação) */}
       <Modal visible={showSubDepartmentModal} transparent animationType="slide" onRequestClose={() => setShowSubDepartmentModal(false)}>
