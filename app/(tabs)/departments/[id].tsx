@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, Platform } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash, Calendar, Shield, AlertTriangle } from 'lucide-react-native';
+import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash, Calendar, Shield, AlertTriangle, X } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useColorScheme } from 'nativewind';
 
@@ -23,14 +23,13 @@ export default function DepartmentDetailsScreen() {
   const [isLeader, setIsLeader] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // Modais
+  // Modais de Criação
   const [showModal, setShowModal] = useState(false);
   const [newFunctionName, setNewFunctionName] = useState('');
   const [savingFunction, setSavingFunction] = useState(false);
   const [showSubDepartmentModal, setShowSubDepartmentModal] = useState(false);
   const [newSubDepartmentName, setNewSubDepartmentName] = useState('');
   const [savingSubDepartment, setSavingSubDepartment] = useState(false);
-  const [showMembersModal, setShowMembersModal] = useState(false);
 
   // Estados do Modal de Confirmação
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
@@ -42,20 +41,17 @@ export default function DepartmentDetailsScreen() {
     loading: false
   });
 
-  // --- LÓGICA DE VOLTAR INTELIGENTE E DEFINITIVA ---
+  // --- LÓGICA DE VOLTAR INTELIGENTE ---
   const handleBack = () => {
     if (department?.parent_id) {
-      // 1. É sub-departamento: Força a volta para o departamento pai
       router.push({ 
         pathname: '/(tabs)/departments/[id]', 
         params: { id: department.parent_id } 
       });
     } else {
-      // 2. É departamento raiz: Força a volta para a ABA DE DEPARTAMENTOS
       router.push('/(tabs)/departments');
     }
   };
-  // ------------------------------------------------
 
   const requestConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, isDestructive = false) => {
     setConfirmConfig({ title, message, onConfirm, isDestructive, loading: false });
@@ -113,6 +109,7 @@ export default function DepartmentDetailsScreen() {
       const { data: leaderCheck } = await supabase.from('department_leaders').select('id').eq('department_id', id).eq('user_id', user.id).single();
       if (leaderCheck) setIsLeader(true);
 
+      // Buscamos availability_deadline_day para usar na criação de subs
       const { data: dept } = await supabase.from('departments').select('id, name, description, priority_order, availability_deadline_day, parent_id, organization_id').eq('id', id).single();
 
       if (dept) {
@@ -128,7 +125,7 @@ export default function DepartmentDetailsScreen() {
     loadData();
   }, [id]);
 
-  // Ações de Remover
+  // Ações
   const handleRemoveMember = (memberId: string, memberName: string) => {
     requestConfirmation('Remover Membro', `ATENÇÃO: '${memberName}' possui escalas? Elas serão apagadas.`, async () => {
       await supabase.from('rosters').delete().eq('member_id', memberId);
@@ -153,7 +150,6 @@ export default function DepartmentDetailsScreen() {
     }, true);
   };
 
-  // Ações de Criar
   const handleCreateFunction = async () => {
     if (!newFunctionName.trim() || !id) return Alert.alert('Erro', 'Nome inválido');
     setSavingFunction(true);
@@ -170,17 +166,25 @@ export default function DepartmentDetailsScreen() {
     if (!newSubDepartmentName.trim() || !id) return Alert.alert('Erro', 'Nome inválido');
     setSavingSubDepartment(true);
     try {
+      // CORREÇÃO AQUI: Incluído availability_deadline_day herdado do pai
       const { error } = await supabase.from('departments').insert({
         name: newSubDepartmentName.trim(),
         parent_id: String(id),
         organization_id: department.organization_id,
+        availability_deadline_day: department.availability_deadline_day || 20, // <--- FALTAVA ISSO
         priority_order: 99
       });
+      
       if (error) throw error;
+      
       setShowSubDepartmentModal(false);
       setNewSubDepartmentName('');
       await fetchSubDepartments(String(id));
-    } catch (e: any) { Alert.alert('Erro', e.message); } finally { setSavingSubDepartment(false); }
+    } catch (e: any) { 
+      Alert.alert('Erro', e.message); 
+    } finally { 
+      setSavingSubDepartment(false); 
+    }
   };
 
   if (loading) return <View className="flex-1 bg-gray-50 dark:bg-zinc-950 items-center justify-center"><ActivityIndicator size="large" color="#3b82f6" /></View>;
@@ -189,10 +193,9 @@ export default function DepartmentDetailsScreen() {
   return (
     <>
       <ScrollView className="flex-1 bg-gray-50 dark:bg-zinc-950">
-        {/* Header */}
         <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 py-3 flex-row items-center">
           <TouchableOpacity onPress={handleBack} className="mr-4 p-2 bg-gray-100 dark:bg-zinc-800 rounded-lg">
-            <ArrowLeft size={20} color={iconColor} />
+            <ArrowLeft size={24} color={iconColor} />
           </TouchableOpacity>
           <View className="flex-1">
             <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">{department.name}</Text>
@@ -206,8 +209,6 @@ export default function DepartmentDetailsScreen() {
         </View>
 
         <View className="p-4">
-          
-          {/* Ações Rápidas */}
           {(isAdmin || isMaster || isLeader) && (
             <View className="mb-6 flex-row gap-3">
               {(isAdmin || isMaster) && (
@@ -223,7 +224,6 @@ export default function DepartmentDetailsScreen() {
             </View>
           )}
 
-          {/* Sub-departamentos */}
           {(subDepartments.length > 0 || isAdmin) && (
             <View className="mb-6">
               <View className="flex-row items-center justify-between mb-4">
@@ -238,15 +238,11 @@ export default function DepartmentDetailsScreen() {
                   </TouchableOpacity>
                 )}
               </View>
-
               {subDepartments.length > 0 ? (
                 <View>
                   {subDepartments.map((child, index) => (
-                    <View key={child.id} className={`bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-zinc-800 rounded-xl p-4 flex-row items-center ${index !== subDepartments.length - 1 ? 'mb-3' : ''}`}>
-                      <TouchableOpacity 
-                        className="flex-1 flex-row items-center" 
-                        onPress={() => router.push({ pathname: '/(tabs)/departments/[id]', params: { id: String(child.id) } })}
-                      >
+                    <View key={child.id} className={`bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 flex-row items-center ${index !== subDepartments.length - 1 ? 'mb-3' : ''}`}>
+                      <TouchableOpacity className="flex-1 flex-row items-center" onPress={() => router.push({ pathname: '/(tabs)/departments/[id]', params: { id: String(child.id) } })}>
                         <View className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 items-center justify-center mr-3">
                             <Folder size={20} color="#4f46e5" />
                         </View>
@@ -273,7 +269,6 @@ export default function DepartmentDetailsScreen() {
             </View>
           )}
 
-          {/* Membros */}
           <View className="mb-6">
             <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)/departments/member-list', params: { id: String(id), name: department?.name } })} className="flex-row items-center justify-between mb-4">
               <View className="flex-row items-center">
@@ -285,7 +280,6 @@ export default function DepartmentDetailsScreen() {
                 <Text className="text-blue-600 dark:text-blue-400 text-sm">Ver membros→</Text>
               </View>
             </TouchableOpacity>
-
             {members.length > 0 ? (
               <View className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800">
                 {members.slice(0, 5).map((member, index) => (
@@ -322,7 +316,6 @@ export default function DepartmentDetailsScreen() {
             )}
           </View>
 
-          {/* Funções */}
           <View className="mb-6">
             <View className="flex-row items-center justify-between mb-4">
               <View className="flex-row items-center">
@@ -365,7 +358,9 @@ export default function DepartmentDetailsScreen() {
         </View>
       </ScrollView>
 
-      {/* Modal Genérico de Confirmação */}
+      {/* --- MODAIS CENTRADOS (Correção para Web e Zoom) --- */}
+
+      {/* Modal de Confirmação */}
       <Modal visible={confirmModalVisible} transparent animationType="fade" onRequestClose={() => setConfirmModalVisible(false)}>
         <View className="flex-1 bg-black/60 justify-center items-center p-4">
             <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
@@ -392,23 +387,60 @@ export default function DepartmentDetailsScreen() {
         </View>
       </Modal>
 
-      {/* Outros Modais (Criação) */}
-      <Modal visible={showSubDepartmentModal} transparent animationType="slide" onRequestClose={() => setShowSubDepartmentModal(false)}>
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6">
-            <View className="flex-row justify-between mb-4"><Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Novo Sub-departamento</Text><TouchableOpacity onPress={() => setShowSubDepartmentModal(false)}><Text className="text-gray-500 text-lg">✕</Text></TouchableOpacity></View>
-            <TextInput className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 mb-4" placeholder="Nome" placeholderTextColor={placeholderColor} value={newSubDepartmentName} onChangeText={setNewSubDepartmentName} />
-            <TouchableOpacity onPress={handleCreateSubDepartment} className="bg-indigo-600 rounded-lg py-4 mb-3"><Text className="text-white text-center font-bold">Criar</Text></TouchableOpacity>
+      {/* Modal Criar Sub-departamento (CENTRALIZADO) */}
+      <Modal visible={showSubDepartmentModal} transparent animationType="fade" onRequestClose={() => setShowSubDepartmentModal(false)}>
+        <View className="flex-1 bg-black/60 justify-center items-center p-4">
+          <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Novo Sub-departamento</Text>
+              <TouchableOpacity onPress={() => setShowSubDepartmentModal(false)}>
+                <X size={24} color={placeholderColor} />
+              </TouchableOpacity>
+            </View>
+            
+            <View className="mb-6">
+              <Text className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Nome</Text>
+              <TextInput 
+                className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 text-base" 
+                placeholder="Ex: Infantil, Louvor..." 
+                placeholderTextColor={placeholderColor} 
+                value={newSubDepartmentName} 
+                onChangeText={setNewSubDepartmentName} 
+              />
+            </View>
+
+            <TouchableOpacity onPress={handleCreateSubDepartment} className="bg-indigo-600 rounded-xl py-3 w-full items-center">
+              <Text className="text-white font-bold text-base">Criar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-6">
-            <View className="flex-row justify-between mb-4"><Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Nova Função</Text><TouchableOpacity onPress={() => setShowModal(false)}><Text className="text-gray-500 text-lg">✕</Text></TouchableOpacity></View>
-            <TextInput className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 mb-4" placeholder="Nome da Função" placeholderTextColor={placeholderColor} value={newFunctionName} onChangeText={setNewFunctionName} />
-            <TouchableOpacity onPress={handleCreateFunction} className="bg-blue-600 rounded-lg py-4 mb-3"><Text className="text-white text-center font-bold">Criar</Text></TouchableOpacity>
+      {/* Modal Criar Função (CENTRALIZADO) */}
+      <Modal visible={showModal} transparent animationType="fade" onRequestClose={() => setShowModal(false)}>
+        <View className="flex-1 bg-black/60 justify-center items-center p-4">
+          <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Nova Função</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <X size={24} color={placeholderColor} />
+              </TouchableOpacity>
+            </View>
+            
+            <View className="mb-6">
+              <Text className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Nome da Função</Text>
+              <TextInput 
+                className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 text-base" 
+                placeholder="Ex: Guitarrista, Professor..." 
+                placeholderTextColor={placeholderColor} 
+                value={newFunctionName} 
+                onChangeText={setNewFunctionName} 
+              />
+            </View>
+
+            <TouchableOpacity onPress={handleCreateFunction} className="bg-blue-600 rounded-xl py-3 w-full items-center">
+              <Text className="text-white font-bold text-base">Criar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
