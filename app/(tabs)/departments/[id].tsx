@@ -193,7 +193,7 @@ export default function DepartmentDetailsScreen() {
   return (
     <>
       <ScrollView className="flex-1 bg-gray-50 dark:bg-zinc-950">
-        <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 py-3 flex-row items-center">
+        <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 py-6 flex-row items-center">
           <TouchableOpacity onPress={handleBack} className="mr-4 p-2 bg-gray-100 dark:bg-zinc-800 rounded-lg">
             <ArrowLeft size={24} color={iconColor} />
           </TouchableOpacity>
