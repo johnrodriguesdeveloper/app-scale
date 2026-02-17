@@ -35,8 +35,8 @@ export default function SettingsScreen() {
     <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
       
       {/* Header */}
-      <View className="bg-white dark:bg-zinc-900 px-4 pt-12 pb-4 border-b border-gray-200 dark:border-zinc-800">
-        <Text className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Configurações</Text>
+      <View className="bg-white dark:bg-zinc-900 px-6 py-7 border-b border-gray-200 dark:border-zinc-800">
+        <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Configurações</Text>
       </View>
 
       <ScrollView className="flex-1 p-4">

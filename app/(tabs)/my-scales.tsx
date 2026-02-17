@@ -129,11 +129,9 @@ export default function MyScalesScreen() {
   return (
     <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
       {/* Header */}
-      <View className="bg-white dark:bg-zinc-900 px-4 pt-12 pb-4 border-b border-gray-200 dark:border-zinc-800">
+      <View className="bg-white dark:bg-zinc-900 px-6 py-7 border-b border-gray-200 dark:border-zinc-800">
         <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => router.back()} className="mr-3 p-2 bg-gray-100 rounded-full">
-            <ArrowLeft size={20} color="#374151" />
-          </TouchableOpacity>
+         
           <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Minhas Escalas</Text>
         </View>
       </View>
