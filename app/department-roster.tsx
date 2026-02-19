@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList, Platform } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, ChevronLeft, ChevronRight, Trash2, X, Filter, Clock } from 'lucide-react-native';
@@ -33,6 +33,7 @@ export default function DepartmentRosterScreen() {
   
   // Filtro e Seleção
   const [hiddenUserIds, setHiddenUserIds] = useState<string[]>([]);
+  const [busyUsers, setBusyUsers] = useState<{user_id: string, service_day_id: string}[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null); // Novo: Saber pra qual culto estamos escalando
   const [selectedFunctionId, setSelectedFunctionId] = useState<string | null>(null);
   const [selectedFunctionName, setSelectedFunctionName] = useState<string>('');
@@ -142,50 +143,41 @@ export default function DepartmentRosterScreen() {
     if (data) setRosterEntries(data);
   };
 
-  const calculateHiddenUsers = async (date: Date) => {
+const calculateHiddenUsers = async (date: Date) => {
     try {
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      // 1. Exceções (Indisponibilidade pontual)
+      // 1. Exceções (Indisponibilidade pontual do membro)
       const { data: exceptions } = await supabase
         .from('availability_exceptions')
         .select('user_id, is_available')
         .eq('specific_date', dateStr);
 
-      // 2. Conflitos (Já escalado em QUALQUER departamento neste dia)
-      // Se a pessoa já toca no "Louvor", talvez não possa estar no "Kids" na mesma hora.
-      // Aqui simplifiquei: se está escalado no dia, marcamos. 
-      // *Melhoria futura: verificar conflito por horário/serviço específico.*
+      const hiddenSet = new Set<string>();
+      members.forEach(member => {
+        const userException = exceptions?.find(e => e.user_id === member.user_id);
+        if (userException && !userException.is_available) {
+          hiddenSet.add(member.user_id);
+        }
+      });
+      setHiddenUserIds(Array.from(hiddenSet));
+
+      // 2. Conflitos (Buscar todas as escalas em TODOS os departamentos neste dia)
       const { data: conflicts } = await supabase
         .from('rosters')
         .select(`
-          member_id,
+          service_day_id,
           department_members!inner ( user_id )
         `)
         .eq('schedule_date', dateStr);
       
-      const busyUserIds = new Set(
-        conflicts?.map((c: any) => c.department_members?.user_id) || []
-      );
+      // Mapeia quem está ocupado e em qual culto
+      const busyList = conflicts?.map((c: any) => ({
+        user_id: c.department_members?.user_id,
+        service_day_id: c.service_day_id
+      })) || [];
 
-      const hiddenSet = new Set<string>();
-
-      members.forEach(member => {
-        const userId = member.user_id;
-        
-        // Se já está escalado no dia, a lógica básica pode ocultar (ou mostrar aviso)
-        // Por enquanto, não vamos ocultar por conflito de roster para permitir dobra, 
-        // mas vamos respeitar a exceção de indisponibilidade.
-        
-        const userException = exceptions?.find(e => e.user_id === userId);
-        
-        // Se tem exceção dizendo que NÃO está disponível
-        if (userException && !userException.is_available) {
-          hiddenSet.add(userId);
-        }
-      });
-
-      setHiddenUserIds(Array.from(hiddenSet));
+      setBusyUsers(busyList);
 
     } catch (error) {
       console.error("Erro no cálculo:", error);
@@ -201,25 +193,34 @@ export default function DepartmentRosterScreen() {
     });
   };
 
-  const handleAddMember = async (memberId: string) => {
+ const handleAddMember = async (memberId: string) => {
     if (!selectedFunctionId || !selectedServiceId) return;
 
     try {
-      const { error } = await supabase.from('rosters').insert({ // Usando Insert para permitir múltiplos no mesmo dia se forem serviços diferentes
+      const { error } = await supabase.from('rosters').insert({
         department_id: departmentId,
         function_id: selectedFunctionId,
         member_id: memberId,
-        service_day_id: selectedServiceId, // <--- CAMPO IMPORTANTE
+        service_day_id: selectedServiceId, 
         schedule_date: format(selectedDate, 'yyyy-MM-dd')
       });
 
       if (error) throw error;
 
+      // SUCESSO: Apenas fecha o modal e recarrega os dados (sem avisos chatos)
       setShowMemberSelect(false);
       fetchRosterForDate(selectedDate);
-      // Recalcular disponibilidade se necessário
+      
     } catch (err: any) {
-      Alert.alert("Erro", err.message);
+      console.error("Erro detalhado:", err);
+      
+      // ERRO: Mostra o alerta de forma compatível com a Web para podermos debugar
+      const msg = err.message || JSON.stringify(err);
+      if (Platform.OS === 'web') {
+        window.alert(`Erro ao escalar: ${msg}`);
+      } else {
+        Alert.alert("Erro ao escalar", msg);
+      }
     }
   };
 
@@ -228,12 +229,21 @@ export default function DepartmentRosterScreen() {
     fetchRosterForDate(selectedDate);
   };
 
-  const filteredMembers = members.filter(member => {
+ const filteredMembers = members.filter(member => {
+    // 1. O membro tem a função necessária? (ex: é baixista?)
     const hasFunction = member.member_functions?.some(
       (mf: any) => mf.function_id === selectedFunctionId
     );
+    
+    // 2. Ele marcou que NÃO PODE neste dia inteiro?
     const isAvailable = !hiddenUserIds.includes(member.user_id);
-    return hasFunction && isAvailable;
+    
+    // 3. Ele JÁ ESTÁ ESCALADO em outro departamento exatamente NESTE CULTO?
+    const isAlreadyBusyInThisService = busyUsers.some(
+      b => b.user_id === member.user_id && b.service_day_id === selectedServiceId
+    );
+    
+    return hasFunction && isAvailable && !isAlreadyBusyInThisService;
   });
 
   // Renderiza um Card de Função DENTRO de um serviço específico
