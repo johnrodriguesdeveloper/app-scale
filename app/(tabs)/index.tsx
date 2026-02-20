@@ -1,18 +1,32 @@
-import { View, Text, ScrollView, TouchableOpacity, SafeAreaView, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, SafeAreaView, Image, ActivityIndicator } from 'react-native';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Calendar, Clock, MapPin, User, ChevronRight } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+interface NextScale {
+  schedule_date: string;
+  department_functions: { name: string };
+  departments: { name: string };
+  service_days?: { name: string };
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const [userName, setUserName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Estado para a próxima escala
+  const [nextScale, setNextScale] = useState<NextScale | null>(null);
+  const [loadingScale, setLoadingScale] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       fetchUserData();
+      fetchNextScale();
     }, [])
   );
 
@@ -39,16 +53,77 @@ export default function HomeScreen() {
     }
   };
 
+  const fetchNextScale = async () => {
+    try {
+      setLoadingScale(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Primeiro, descobre qual o member_id desse usuário
+      const { data: memberRecords } = await supabase
+        .from('department_members')
+        .select('id')
+        .eq('user_id', user.id);
+
+      if (!memberRecords || memberRecords.length === 0) {
+        setNextScale(null);
+        return;
+      }
+
+      const memberIds = memberRecords.map(m => m.id);
+
+      // Pega a data de hoje no formato YYYY-MM-DD para buscar escalas futuras
+      const today = new Date().toISOString().split('T')[0];
+
+      // Busca a próxima escala na tabela rosters
+      const { data: rosterData } = await supabase
+        .from('rosters')
+        .select(`
+          schedule_date,
+          department_functions ( name ),
+          departments ( name ),
+          service_days ( name )
+        `)
+        .in('member_id', memberIds)
+        .gte('schedule_date', today)
+        .order('schedule_date', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (rosterData) {
+        setNextScale(rosterData as unknown as NextScale);
+      } else {
+        setNextScale(null);
+      }
+
+    } catch (error) {
+      // É normal cair aqui se a query .single() não encontrar nada
+      setNextScale(null);
+    } finally {
+      setLoadingScale(false);
+    }
+  };
+
+  const formatScaleDate = (dateString: string) => {
+    try {
+      const date = parseISO(dateString);
+      // Ex: "Dom, 25 de Fev"
+      return format(date, "EEE, dd 'de' MMM", { locale: ptBR });
+    } catch (e) {
+      return dateString;
+    }
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-zinc-950">
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }}>
         
         {/* Header Ultra Limpo */}
-        <View className="px-6 pt-10 pb-4 flex-row justify-between items-start mb-4 border-b border-gray-200 dark:border-zinc-800">
+        <View className="px-6 pt-10 pb-6 flex-row justify-between items-start mb-2">
           <View className="flex-row items-center">
             <Text className="text-gray-500 dark:text-zinc-400 text-base font-medium">Olá,</Text>
             <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 tracking-tight">
-              {''} {userName} 👋
+              {' '} {userName} 👋
             </Text>
           </View>
           
@@ -72,7 +147,7 @@ export default function HomeScreen() {
         {/* Lista de Ações */}
         <View className="px-6 gap-4">
           
-          {/* 1. AGENDA */}
+          {/* 1. AGENDA INTELIGENTE */}
           <TouchableOpacity 
             onPress={() => router.push('/my-scales')}
             className="flex-row items-center bg-white dark:bg-zinc-900 p-5 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-sm active:bg-gray-50 dark:active:bg-zinc-800 transition-all"
@@ -80,9 +155,27 @@ export default function HomeScreen() {
             <View className="w-14 h-14 bg-blue-50 dark:bg-blue-500/10 rounded-2xl items-center justify-center mr-5">
               <Calendar size={26} className="text-blue-600 dark:text-blue-400" />
             </View>
-            <View className="flex-1">
+            <View className="flex-1 justify-center">
               <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Minha Agenda</Text>
-              <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-0.5">Veja suas escalas</Text>
+              
+              {/* Lógica do Subtítulo */}
+              {loadingScale ? (
+                  <Text className="text-gray-400 dark:text-zinc-500 text-sm mt-0.5">Buscando...</Text>
+              ) : nextScale ? (
+                  <View className="mt-1">
+                      <Text className="text-gray-400 dark:text-zinc-500 text-[10px] uppercase font-bold tracking-wider mb-0.5">
+                          Sua próxima escala
+                      </Text>
+                      <Text className="text-blue-600 dark:text-blue-400 font-semibold text-sm capitalize">
+                          {formatScaleDate(nextScale.schedule_date)}
+                      </Text>
+                      <Text className="text-gray-500 dark:text-zinc-400 text-xs mt-0.5" numberOfLines={1}>
+                          {nextScale.departments?.name} • {nextScale.department_functions?.name}
+                      </Text>
+                  </View>
+              ) : (
+                  <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-0.5">Nenhuma escala próxima</Text>
+              )}
             </View>
             <ChevronRight size={20} className="text-gray-300 dark:text-zinc-600" />
           </TouchableOpacity>
