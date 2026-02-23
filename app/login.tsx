@@ -1,18 +1,30 @@
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Linking, Modal } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { LogIn, UserPlus, Mail, Lock } from 'lucide-react-native';
+import { LogIn, UserPlus, Mail, Lock, AlertTriangle } from 'lucide-react-native';
+import { useColorScheme } from 'nativewind';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { colorScheme } = useColorScheme();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Estados do Modal
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalMessage, setModalMessage] = useState({ title: '', message: '' });
+
+  const showErrorModal = (title: string, message: string) => {
+    setModalMessage({ title, message });
+    setModalVisible(true);
+  };
+
   const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Erro', 'Por favor, preencha todos os campos');
+      showErrorModal('Atenção', 'Por favor, preencha todos os campos.');
       return;
     }
 
@@ -24,12 +36,19 @@ export default function LoginScreen() {
       });
 
       if (error) {
-        Alert.alert('Erro ao entrar', error.message);
+        // Traduzindo os erros mais comuns do Supabase para o usuário
+        if (error.message === 'Invalid login credentials') {
+          showErrorModal('Acesso Negado', 'Email ou senha incorretos. Tente novamente.');
+        } else if (error.message === 'Email not confirmed') {
+          showErrorModal('Atenção', 'Por favor, confirme seu email clicando no link que enviamos para você antes de fazer login.');
+        } else {
+          showErrorModal('Erro ao entrar', error.message);
+        }
       } else {
         router.replace('/(tabs)');
       }
     } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Ocorreu um erro inesperado');
+      showErrorModal('Erro Inesperado', error.message || 'Ocorreu um erro inesperado. Tente novamente mais tarde.');
     } finally {
       setLoading(false);
     }
@@ -66,7 +85,7 @@ export default function LoginScreen() {
               <TextInput
                 className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
                 placeholder="Email"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colorScheme === 'dark' ? '#52525b' : '#9ca3af'}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -84,7 +103,7 @@ export default function LoginScreen() {
               <TextInput
                 className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
                 placeholder="Senha"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colorScheme === 'dark' ? '#52525b' : '#9ca3af'}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -142,6 +161,39 @@ export default function LoginScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* --- MODAL DE ERRO --- */}
+      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
+        <View className="flex-1 bg-black/60 justify-center items-center p-4">
+          <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
+            
+            <View className="items-center mb-6">
+              <View className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 items-center justify-center mb-4">
+                <AlertTriangle size={32} color={colorScheme === 'dark' ? '#ef4444' : '#dc2626'} />
+              </View>
+
+              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 text-center mb-2">
+                {modalMessage.title}
+              </Text>
+              
+              <Text className="text-gray-500 dark:text-zinc-400 text-center text-base px-2">
+                {modalMessage.message}
+              </Text>
+            </View>
+
+            <TouchableOpacity 
+              onPress={() => setModalVisible(false)}
+              className="bg-red-600 py-3 rounded-xl w-full"
+            >
+              <Text className="text-white font-bold text-center text-lg">
+                Tentar Novamente
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
