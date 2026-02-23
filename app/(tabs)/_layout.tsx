@@ -3,7 +3,7 @@ import { Calendar, Home, Settings, Users } from 'lucide-react-native';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, Platform } from 'react-native';
 import { useColorScheme } from 'nativewind';
 
 export default function TabLayout() {
@@ -59,33 +59,52 @@ export default function TabLayout() {
     );
   }
 
+  // Cor das divisórias (ajusta conforme o tema)
+  const dividerColor = isDark ? '#27272a' : '#e5e7eb'; // zinc-800 ou gray-200
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#3b82f6', // Azul padrão
-        tabBarInactiveTintColor: isDark ? '#a1a1aa' : '#6b7280', // Zinc-400 vs Gray-500
+        tabBarShowLabel: false, // <-- REMOVE OS TEXTOS
+        tabBarActiveTintColor: '#2563eb', // Azul em destaque
+        tabBarInactiveTintColor: isDark ? '#52525b' : '#9ca3af', // Cinza para inativos
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: isDark ? '#18181b' : '#ffffff', // Zinc-900 vs White
-          borderTopColor: isDark ? '#27272a' : '#e5e7eb', // Zinc-800 vs Gray-200
-        }
+          backgroundColor: isDark ? '#18181b' : '#ffffff',
+          borderTopWidth: 1,
+          borderTopColor: dividerColor,
+          height: Platform.OS === 'ios' ? 85 : 70, // Altura maior para acomodar os ícones grandes
+          elevation: 10,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: isDark ? 0.2 : 0.05,
+          shadowRadius: 8,
+        },
       }}
     >
       {/* 1. HOME */}
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+          // Ícone maior (size 30)
+          tabBarIcon: ({ color }) => <Home size={30} color={color} />,
+          // Adiciona a divisória na direita
+          tabBarItemStyle: {
+            borderRightWidth: 1,
+            borderRightColor: dividerColor,
+          }
         }}
       />
 
-      {/* 2. AGENDA (Antigo Calendário) */}
+      {/* 2. AGENDA */}
       <Tabs.Screen
         name="my-scales"
         options={{
-          title: 'Agenda', // <--- Mudamos o nome aqui
-          tabBarIcon: ({ color, size }) => <Calendar size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Calendar size={30} color={color} />,
+          tabBarItemStyle: {
+            borderRightWidth: 1,
+            borderRightColor: dividerColor,
+          }
         }}
       />
 
@@ -93,38 +112,34 @@ export default function TabLayout() {
       <Tabs.Screen
         name="departments"
         options={{
-          title: 'Departamentos',
-          tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Users size={30} color={color} />,
+          tabBarItemStyle: {
+            borderRightWidth: 1,
+            borderRightColor: dividerColor,
+          }
         }}
       />
 
-      {/* --- TELAS OCULTAS (Não aparecem na barra, mas precisam estar aqui para funcionar) --- */}
+      {/* --- TELAS OCULTAS --- */}
       <Tabs.Screen
         name="departments/[id]"
-        options={{
-          href: null,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="departments/member-list"
-        options={{
-          href: null,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="settings/schedule"
-        options={{
-          href: null,
-        }}
+        options={{ href: null }}
       />
-      {/* ---------------------------------------------------------------------------------- */}
+      {/* ------------------- */}
 
-      {/* 4. CONFIGURAÇÕES (Último item) */}
+      {/* 4. CONFIGURAÇÕES (O último não tem borda na direita) */}
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Configurações',
-          tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Settings size={30} color={color} />,
         }}
       />
     </Tabs>
