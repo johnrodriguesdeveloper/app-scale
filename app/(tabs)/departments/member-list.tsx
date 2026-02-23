@@ -1,4 +1,4 @@
-import { View, Text, FlatList, TouchableOpacity, Alert, ActivityIndicator, Modal, TextInput } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Alert, ActivityIndicator, Modal, TextInput, Platform } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { User, Trash, Plus, ShieldCheck, ArrowLeft, X, AlertTriangle } from 'lucide-react-native';
@@ -9,7 +9,6 @@ interface Member {
   id: string;
   user_id: string;
   dept_role: string;
-  is_leader: boolean;
   profiles: {
     full_name: string;
     avatar_url?: string | null;
@@ -41,6 +40,9 @@ export default function MemberListScreen() {
   const iconColor = colorScheme === 'dark' ? '#e4e4e7' : '#374151';
   
   const [members, setMembers] = useState<Member[]>([]);
+  // NOVO: Estado para guardar quem são os líderes deste departamento
+  const [departmentLeaders, setDepartmentLeaders] = useState<string[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [canEdit, setCanEdit] = useState(false);
   
@@ -76,13 +78,7 @@ export default function MemberListScreen() {
 
   // --- CONFIGURAÇÃO DO MODAL DE CONFIRMAÇÃO ---
   const requestConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, isDestructive = false) => {
-    setConfirmConfig({
-      title,
-      message,
-      onConfirm,
-      isDestructive,
-      loading: false
-    });
+    setConfirmConfig({ title, message, onConfirm, isDestructive, loading: false });
     setConfirmModalVisible(true);
   };
 
@@ -98,8 +94,8 @@ export default function MemberListScreen() {
       setConfirmConfig(prev => ({ ...prev, loading: false }));
     }
   };
-  // ---------------------------------------------
 
+  // --- PERMISSÕES (AGORA USA A TABELA CORRETA) ---
   const checkPermissions = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -113,14 +109,15 @@ export default function MemberListScreen() {
 
       const isGlobalAdmin = profile?.org_role === 'admin' || profile?.org_role === 'master';
 
-      const { data: memberRecord } = await supabase
-        .from('department_members')
-        .select('is_leader')
+      // Busca na tabela de líderes reais que o Master configurou
+      const { data: leaderRecord } = await supabase
+        .from('department_leaders')
+        .select('id')
         .eq('user_id', user.id)
         .eq('department_id', id)
-        .single();
+        .maybeSingle();
 
-      const isDeptLeader = memberRecord?.is_leader || false;
+      const isDeptLeader = !!leaderRecord; // Se encontrou registro, é líder
       setCanEdit(isGlobalAdmin || isDeptLeader);
 
     } catch (error) {
@@ -128,27 +125,41 @@ export default function MemberListScreen() {
     }
   };
 
+  // --- CARREGAR DADOS (AGORA ORDENA PELOS LÍDERES REAIS) ---
   const loadMembers = async () => {
     if (!id) return;
     try {
+      // 1. Primeiro descobre quem são os líderes
+      const { data: leadersData } = await supabase
+        .from('department_leaders')
+        .select('user_id')
+        .eq('department_id', id);
+
+      const leaderIds = leadersData?.map(l => l.user_id) || [];
+      setDepartmentLeaders(leaderIds);
+
+      // 2. Busca os membros normais
       const { data, error } = await supabase
         .from('department_members')
         .select(`
-          id, user_id, dept_role, is_leader,
+          id, user_id, dept_role,
           profiles ( full_name, avatar_url, email ),
           member_functions (
             department_functions ( id, name )
           )
         `)
-        .eq('department_id', id)
-        .order('is_leader', { ascending: false });
+        .eq('department_id', id);
 
       if (error) throw error;
 
       if (data) {
+        // Ordena colocando os líderes reais no topo
         const sorted = (data as any).sort((a: any, b: any) => {
-             if (a.is_leader && !b.is_leader) return -1;
-             if (!a.is_leader && b.is_leader) return 1;
+             const aIsLeader = leaderIds.includes(a.user_id);
+             const bIsLeader = leaderIds.includes(b.user_id);
+             
+             if (aIsLeader && !bIsLeader) return -1;
+             if (!aIsLeader && bIsLeader) return 1;
              return (a.profiles?.full_name || '').localeCompare(b.profiles?.full_name || '');
         });
         setMembers(sorted);
@@ -179,7 +190,6 @@ export default function MemberListScreen() {
   };
 
   // --- AÇÕES DO MODAL DE ADIÇÃO ---
-
   const openAddMemberModal = async () => {
     setModalMode('add_member');
     setSelectedMemberId(null);
@@ -219,7 +229,6 @@ export default function MemberListScreen() {
           .insert({ member_id: newMember.id, function_id: selectedFunction.id });
 
         if (funcError) throw funcError;
-        Alert.alert('Sucesso', 'Membro adicionado!');
 
       } else {
         if (!selectedMemberId) return;
@@ -231,13 +240,11 @@ export default function MemberListScreen() {
         if (error) {
            if (error.code === '23505') Alert.alert('Aviso', 'Este membro já possui essa função.');
            else throw error;
-        } else {
-           Alert.alert('Sucesso', 'Função adicionada!');
-        }
+        } 
       }
 
       setShowModal(false);
-      await loadMembers();
+      await loadMembers(); // Recarrega para mostrar a mudança
     } catch (error: any) {
       Alert.alert('Erro', error.message);
     } finally {
@@ -246,27 +253,18 @@ export default function MemberListScreen() {
   };
 
   // --- DELETAR (USANDO O NOVO MODAL) ---
-
   const handleDeleteMember = (memberId: string) => {
     requestConfirmation(
       'Remover Membro',
       'Tem certeza que deseja remover este membro? Todas as escalas futuras dele serão apagadas.',
       async () => {
-        // 1. Limpar Escalas (Rosters)
         await supabase.from('rosters').delete().eq('member_id', memberId);
-        
-        // 2. Limpar Funções Vinculadas
         await supabase.from('member_functions').delete().eq('member_id', memberId);
-
-        // 3. Excluir Membro
         const { error } = await supabase.from('department_members').delete().eq('id', memberId);
-        
         if (error) throw error;
-        
-        // Atualização Otimista
         setMembers(prev => prev.filter(m => m.id !== memberId));
       },
-      true // Destrutivo
+      true
     );
   };
 
@@ -282,7 +280,6 @@ export default function MemberListScreen() {
                 .eq('function_id', functionId);
             
             if (error) throw error;
-            
             await loadMembers();
         },
         true
@@ -290,7 +287,6 @@ export default function MemberListScreen() {
   };
 
   // --- RENDERIZAÇÃO ---
-
   const filteredProfiles = availableProfiles.filter(p => 
     p.full_name.toLowerCase().includes(searchText.toLowerCase())
   );
@@ -312,6 +308,9 @@ export default function MemberListScreen() {
   const renderMember = ({ item }: { item: Member }) => {
     const functionsList = item.member_functions?.map(mf => mf.department_functions) || [];
     const hasMoreFunctions = functionsList.length < availableFunctions.length;
+    
+    // VERIFICA SE ESTE USUÁRIO ESTÁ NA LISTA DE LÍDERES
+    const isLeader = departmentLeaders.includes(item.user_id);
 
     return (
       <View className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800 mx-4 mb-3">
@@ -323,7 +322,9 @@ export default function MemberListScreen() {
               </View>
               <View>
                 <Text className="text-gray-900 dark:text-zinc-100 font-bold text-base">{item.profiles?.full_name}</Text>
-                {item.is_leader && (
+                
+                {/* SELO DE LÍDER DINÂMICO */}
+                {isLeader && (
                     <View className="bg-amber-100 dark:bg-amber-500/10 px-2 py-0.5 rounded-md self-start mt-0.5 flex-row items-center">
                         <ShieldCheck size={10} color="#b45309" className="mr-1"/>
                         <Text className="text-amber-800 dark:text-amber-400 text-[10px] font-bold">LÍDER</Text>
@@ -333,7 +334,7 @@ export default function MemberListScreen() {
             </View>
             
             {canEdit && (
-              <TouchableOpacity onPress={() => handleDeleteMember(item.id)} className="p-2 bg-gray-50 rounded-full">
+              <TouchableOpacity onPress={() => handleDeleteMember(item.id)} className="p-2 bg-gray-50 dark:bg-zinc-800 rounded-full">
                 <Trash size={16} color="#ef4444" />
               </TouchableOpacity>
             )}
@@ -345,16 +346,16 @@ export default function MemberListScreen() {
                     key={func.id}
                     disabled={!canEdit}
                     onPress={() => handleRemoveFunction(item.id, func.id)}
-                    className="bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 flex-row items-center"
+                    className="bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-lg border border-blue-100 dark:border-blue-800 flex-row items-center"
                 >
-                    <Text className="text-blue-700 text-xs font-semibold mr-1">{func.name}</Text>
-                    {canEdit && <Text className="text-blue-400 text-xs ml-1">×</Text>}
+                    <Text className="text-blue-700 dark:text-blue-300 text-xs font-semibold mr-1">{func.name}</Text>
+                    {canEdit && <Text className="text-blue-400 dark:text-blue-500 text-xs ml-1">×</Text>}
                 </TouchableOpacity>
             ))}
             
             {canEdit && hasMoreFunctions && (
-                <TouchableOpacity onPress={() => openAddFunctionModal(item)} className="bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 border-dashed">
-                    <Text className="text-gray-500 text-xs font-semibold">+ Add</Text>
+                <TouchableOpacity onPress={() => openAddFunctionModal(item)} className="bg-gray-100 dark:bg-zinc-800 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-700 border-dashed">
+                    <Text className="text-gray-500 dark:text-zinc-400 text-xs font-semibold">+ Add</Text>
                 </TouchableOpacity>
             )}
           </View>
@@ -363,13 +364,13 @@ export default function MemberListScreen() {
     );
   };
 
-  if (loading) return <View className="flex-1 items-center justify-center dark:bg-zinc-900"><ActivityIndicator color="#2563eb"/></View>;
+  if (loading) return <View className="flex-1 items-center justify-center dark:bg-zinc-950"><ActivityIndicator color="#2563eb"/></View>;
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
       
-    
-      <View className="bg-white dark:bg-zinc-900 px-4 py-6 border-b border-gray-200 dark:border-zinc-800 flex-row items-center">
+      {/* HEADER CORRIGIDO COM NAVEGAÇÃO SEGURA */}
+      <View className="bg-white dark:bg-zinc-900 px-4 pt-12 pb-4 border-b border-gray-200 dark:border-zinc-800 flex-row items-center">
         <TouchableOpacity 
           onPress={() => {
               router.push({
@@ -425,6 +426,7 @@ export default function MemberListScreen() {
                         value={searchText}
                         onChangeText={setSearchText}
                         placeholder="Buscar por nome..."
+                        placeholderTextColor={colorScheme === 'dark' ? '#52525b' : '#9ca3af'}
                         className="border border-gray-300 dark:border-zinc-700 rounded-lg p-3 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 mb-2"
                     />
                     
