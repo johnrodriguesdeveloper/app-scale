@@ -36,7 +36,6 @@ export default function LoginScreen() {
       });
 
       if (error) {
-        // Traduzindo os erros mais comuns do Supabase para o usuário
         if (error.message === 'Invalid login credentials') {
           showErrorModal('Acesso Negado', 'Email ou senha incorretos. Tente novamente.');
         } else if (error.message === 'Email not confirmed') {
@@ -59,8 +58,8 @@ export default function LoginScreen() {
   };
 
   return (
+    // Fundo da tela principal
     <View className="flex-1 bg-blue-50 dark:bg-zinc-950">
-      {/* Conteúdo Centralizado */}
       <View className="flex-1 justify-center px-6">
         
         <View className="items-center mb-12">
@@ -79,11 +78,13 @@ export default function LoginScreen() {
         {/* Form */}
         <View>
           {/* Email Input */}
-          <View className="mb-4">
-            <View className="flex-row items-center bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
+         <View className="mb-4">
+            <View className="flex-row items-center bg-blue-100 dark:bg-zinc-900 rounded-lg border border-blue-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
               <Mail size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
+                // MUDANÇA AQUI: bg-transparent e outline-none
+                className="flex-1 text-gray-900 dark:text-zinc-100 text-base bg-transparent outline-none"
+                style={{ backgroundColor: 'transparent' }} // Força a remoção do fundo branco web
                 placeholder="Email"
                 placeholderTextColor={colorScheme === 'dark' ? '#52525b' : '#9ca3af'}
                 value={email}
@@ -98,10 +99,12 @@ export default function LoginScreen() {
 
           {/* Password Input */}
           <View className="mb-6">
-            <View className="flex-row items-center bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
+            <View className="flex-row items-center bg-blue-100 dark:bg-zinc-900 rounded-lg border border-blue-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
               <Lock size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
+                // MUDANÇA AQUI: bg-transparent e outline-none
+                className="flex-1 text-gray-900 dark:text-zinc-100 text-base bg-transparent outline-none"
+                style={{ backgroundColor: 'transparent' }} // Força a remoção do fundo branco web
                 placeholder="Senha"
                 placeholderTextColor={colorScheme === 'dark' ? '#52525b' : '#9ca3af'}
                 value={password}
@@ -114,7 +117,7 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {/* Sign In Button */}
+          {/* Buttons... (sem alterações) */}
           <TouchableOpacity
             onPress={handleSignIn}
             disabled={loading}
@@ -133,7 +136,6 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Link para Sign Up */}
           <TouchableOpacity
             onPress={() => router.push('/signup')}
             disabled={loading}
@@ -150,7 +152,7 @@ export default function LoginScreen() {
         </View>
       </View>
 
-      {/* Footer / Rodapé */}
+      {/* Footer */}
       <View className="pb-8 items-center justify-end px-6">
         <Text className="text-gray-400 dark:text-zinc-600 text-xs mb-1">
           Versão 1.0.0
@@ -162,25 +164,21 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* --- MODAL DE ERRO --- */}
+      {/* Modal de Erro (mantido do passo anterior) */}
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View className="flex-1 bg-black/60 justify-center items-center p-4">
           <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
-            
             <View className="items-center mb-6">
               <View className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 items-center justify-center mb-4">
                 <AlertTriangle size={32} color={colorScheme === 'dark' ? '#ef4444' : '#dc2626'} />
               </View>
-
               <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 text-center mb-2">
                 {modalMessage.title}
               </Text>
-              
               <Text className="text-gray-500 dark:text-zinc-400 text-center text-base px-2">
                 {modalMessage.message}
               </Text>
             </View>
-
             <TouchableOpacity 
               onPress={() => setModalVisible(false)}
               className="bg-red-600 py-3 rounded-xl w-full"
@@ -189,11 +187,9 @@ export default function LoginScreen() {
                 Tentar Novamente
               </Text>
             </TouchableOpacity>
-
           </View>
         </View>
       </Modal>
-
     </View>
   );
 }
