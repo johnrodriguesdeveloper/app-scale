@@ -65,21 +65,26 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarShowLabel: false, // <-- REMOVE OS TEXTOS
-        tabBarActiveTintColor: '#2563eb', // Azul em destaque
-        tabBarInactiveTintColor: isDark ? '#52525b' : '#9ca3af', // Cinza para inativos
+        tabBarShowLabel: false,
+        tabBarActiveTintColor: '#2563eb',
+        tabBarInactiveTintColor: isDark ? '#52525b' : '#9ca3af',
         headerShown: false,
         tabBarStyle: {
           backgroundColor: isDark ? '#18181b' : '#ffffff',
           borderTopWidth: 1,
           borderTopColor: dividerColor,
-          height: Platform.OS === 'ios' ? 85 : 70, // Altura maior para acomodar os ícones grandes
+          height: 85, // Mantém a altura total da barra
           elevation: 10,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: isDark ? 0.2 : 0.05,
           shadowRadius: 8,
+          // ❌ Sem paddingBottom aqui
         },
+        // Opcional: Você pode tentar empurrar todos os ícones de uma vez aqui
+        tabBarIconStyle: {
+          marginBottom: 15, // Ajuste esse valor para subir os ícones o quanto precisar
+        }
       }}
     >
       {/* 1. HOME */}
@@ -138,8 +143,12 @@ export default function TabLayout() {
       {/* 4. CONFIGURAÇÕES (O último não tem borda na direita) */}
       <Tabs.Screen
         name="settings"
-        options={{
+       options={{
           tabBarIcon: ({ color }) => <Settings size={30} color={color} />,
+          tabBarItemStyle: {
+            borderRightWidth: 1,
+            borderRightColor: dividerColor,
+          }
         }}
       />
     </Tabs>
