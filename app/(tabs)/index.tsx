@@ -119,7 +119,7 @@ export default function HomeScreen() {
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }}>
         
         {/* Header Ultra Limpo */}
-        <View className="px-6 pt-10 pb-6 flex-row justify-between items-start mb-2">
+        <View className="px-6 pt-8 pb-4 flex-row justify-between items-start mb-2 border-b border-gray-200 dark:border-zinc-800 mb-8">
           <View className="flex-row items-center">
             <Text className="text-gray-500 dark:text-zinc-400 text-base font-medium">Olá,</Text>
             <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 tracking-tight">
