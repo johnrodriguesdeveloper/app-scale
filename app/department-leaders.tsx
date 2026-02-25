@@ -1,7 +1,7 @@
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, Platform } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, UserPlus, Trash2, ShieldCheck } from 'lucide-react-native';
+import { ArrowLeft, Search, UserPlus, Trash2, ShieldCheck, AlertTriangle } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useColorScheme } from 'nativewind';
 
@@ -32,7 +32,7 @@ export default function ManageLeadersScreen() {
   const { colorScheme } = useColorScheme();
   
   // Cores dinâmicas para ícones e inputs
-  const iconColor = colorScheme === 'dark' ? '#e4e4e7' : '#374151'; // Zinc-200 vs Gray-700
+  const iconColor = colorScheme === 'dark' ? '#e4e4e7' : '#374151';
   const placeholderColor = colorScheme === 'dark' ? '#a1a1aa' : '#9ca3af';
   
   const [leaders, setLeaders] = useState<Leader[]>([]);
@@ -41,6 +41,15 @@ export default function ManageLeadersScreen() {
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
+
+  // --- ESTADOS DO MODAL DE CONFIRMAÇÃO ---
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState({
+    title: '',
+    message: '',
+    onConfirm: async () => {},
+    loading: false
+  });
 
   useEffect(() => {
     fetchLeaders();
@@ -80,10 +89,7 @@ export default function ManageLeadersScreen() {
         .eq('department_id', departmentId)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Erro ao buscar líderes:', error);
-        return;
-      }
+      if (error) throw error;
 
       if (data) {
         const formattedLeaders = data.map((leader: any) => ({
@@ -119,10 +125,7 @@ export default function ManageLeadersScreen() {
         .neq('org_role', 'master')
         .limit(10);
 
-      if (error) {
-        console.error('Erro na busca:', error);
-        return;
-      }
+      if (error) throw error;
 
       const leaderUserIds = leaders.map(leader => leader.user_id);
       const availableUsers = (data || []).filter(
@@ -148,62 +151,63 @@ export default function ManageLeadersScreen() {
 
       if (error) {
         if (error.code === '23505') {
-          Alert.alert('Aviso', 'Este usuário já é líder deste departamento.');
+          if (Platform.OS === 'web') window.alert('Este usuário já é líder deste departamento.');
+          else Alert.alert('Aviso', 'Este usuário já é líder deste departamento.');
         } else {
           throw error;
         }
         return;
       }
 
-      Alert.alert('Sucesso', `${userName} adicionado como líder com sucesso!`);
-      
       setSearchText('');
       setSearchResults([]);
       await fetchLeaders();
     } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Não foi possível adicionar o líder.');
+      const msg = error.message || 'Não foi possível adicionar o líder.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Erro', msg);
     }
   };
 
-  const handleRemoveLeader = async (leaderId: string, userName: string) => {
-    Alert.alert(
-      'Remover Líder',
-      `Tem certeza que deseja remover ${userName} como líder deste departamento?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Remover',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('department_leaders')
-                .delete()
-                .eq('id', leaderId);
+  // --- NOVA FUNÇÃO DE REMOVER (Usando Modal) ---
+  const handleRemoveLeader = (leaderId: string, userName: string) => {
+    setConfirmConfig({
+      title: 'Remover Líder',
+      message: `Tem certeza que deseja remover ${userName} como líder deste departamento?`,
+      loading: false,
+      onConfirm: async () => {
+        const { error } = await supabase
+          .from('department_leaders')
+          .delete()
+          .eq('id', leaderId);
 
-              if (error) {
-                Alert.alert('Erro', 'Não foi possível remover o líder.');
-                return;
-              }
+        if (error) throw error;
+        await fetchLeaders();
+      }
+    });
+    setConfirmModalVisible(true);
+  };
 
-              Alert.alert('Sucesso', 'Líder removido com sucesso!');
-              await fetchLeaders();
-            } catch (error) {
-              Alert.alert('Erro', 'Ocorreu um erro inesperado.');
-            }
-          },
-        },
-      ]
-    );
+  const executeConfirmAction = async () => {
+    setConfirmConfig(prev => ({ ...prev, loading: true }));
+    try {
+      await confirmConfig.onConfirm();
+      setConfirmModalVisible(false);
+    } catch (error) {
+      if (Platform.OS === 'web') window.alert('Não foi possível remover o líder.');
+      else Alert.alert('Erro', 'Não foi possível remover o líder.');
+    } finally {
+      setConfirmConfig(prev => ({ ...prev, loading: false }));
+    }
   };
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
       {/* Header */}
       <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 py-4">
-        <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => router.back()} className="mr-4">
-            <ArrowLeft size={24} color={iconColor} />
+        <View className="flex-row items-center mt-8">
+          <TouchableOpacity onPress={() => router.back()} className="mr-4 p-2 bg-gray-100 dark:bg-zinc-800 rounded-lg">
+            <ArrowLeft size={20} color={iconColor} />
           </TouchableOpacity>
           <View className="flex-1">
             <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">
@@ -224,7 +228,8 @@ export default function ManageLeadersScreen() {
             <TextInput
               placeholder="Buscar membro para adicionar como líder..."
               placeholderTextColor={placeholderColor}
-              className="flex-1 text-base text-gray-900 dark:text-zinc-100"
+              className="flex-1 text-base text-gray-900 dark:text-zinc-100 outline-none"
+              style={{ backgroundColor: 'transparent' }}
               value={searchText}
               onChangeText={searchUsers}
             />
@@ -286,7 +291,6 @@ export default function ManageLeadersScreen() {
             leaders.map((leader) => (
               <View
                 key={leader.id}
-                // Amber (amarelo) no dark mode fica melhor um pouco mais transparente e escuro
                 className="bg-amber-50 dark:bg-amber-900/10 rounded-xl p-4 mb-3 border border-amber-200 dark:border-amber-800/50"
               >
                 <View className="flex-row items-center justify-between">
@@ -330,6 +334,48 @@ export default function ManageLeadersScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* --- MODAL DE CONFIRMAÇÃO --- */}
+      <Modal visible={confirmModalVisible} transparent animationType="fade" onRequestClose={() => setConfirmModalVisible(false)}>
+        <View className="flex-1 bg-black/60 justify-center items-center p-4">
+            <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
+                <View className="items-center mb-4">
+                    <View className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 items-center justify-center mb-3">
+                        <AlertTriangle size={24} color={colorScheme === 'dark' ? '#ef4444' : '#dc2626'} />
+                    </View>
+                    <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 text-center mb-2">
+                        {confirmConfig.title}
+                    </Text>
+                    <Text className="text-gray-500 dark:text-zinc-400 text-center text-base">
+                        {confirmConfig.message}
+                    </Text>
+                </View>
+
+                <View className="flex-row gap-3">
+                    <TouchableOpacity 
+                        onPress={() => setConfirmModalVisible(false)}
+                        className="flex-1 bg-gray-100 dark:bg-zinc-800 py-3 rounded-xl"
+                        disabled={confirmConfig.loading}
+                    >
+                        <Text className="text-gray-700 dark:text-zinc-300 font-semibold text-center">Cancelar</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                        onPress={executeConfirmAction}
+                        className="flex-1 bg-red-600 py-3 rounded-xl flex-row justify-center items-center"
+                        disabled={confirmConfig.loading}
+                    >
+                        {confirmConfig.loading ? (
+                            <ActivityIndicator size="small" color="white" />
+                        ) : (
+                            <Text className="text-white font-semibold text-center">Remover</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }

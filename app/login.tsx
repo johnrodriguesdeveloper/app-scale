@@ -22,7 +22,7 @@ export default function LoginScreen() {
     setModalVisible(true);
   };
 
-  const handleSignIn = async () => {
+ const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) {
       showErrorModal('Atenção', 'Por favor, preencha todos os campos.');
       return;
@@ -36,10 +36,17 @@ export default function LoginScreen() {
       });
 
       if (error) {
-        if (error.message === 'Invalid login credentials') {
-          showErrorModal('Acesso Negado', 'Email ou senha incorretos. Tente novamente.');
-        } else if (error.message === 'Email not confirmed') {
-          showErrorModal('Atenção', 'Por favor, confirme seu email clicando no link que enviamos para você antes de fazer login.');
+        // Agora o Supabase vai nos mandar o erro correto!
+        if (error.message === 'Email not confirmed') {
+          showErrorModal(
+            'Email não verificado', 
+            'Por favor, clique no link de confirmação que enviamos para o seu email antes de entrar.'
+          );
+        } else if (error.message === 'Invalid login credentials') {
+          showErrorModal(
+            'Acesso Negado', 
+            'Email ou senha incorretos. Verifique seus dados e tente novamente.'
+          );
         } else {
           showErrorModal('Erro ao entrar', error.message);
         }
@@ -47,7 +54,7 @@ export default function LoginScreen() {
         router.replace('/(tabs)');
       }
     } catch (error: any) {
-      showErrorModal('Erro Inesperado', error.message || 'Ocorreu um erro inesperado. Tente novamente mais tarde.');
+      showErrorModal('Erro Inesperado', error.message || 'Ocorreu um erro inesperado.');
     } finally {
       setLoading(false);
     }
@@ -68,7 +75,7 @@ export default function LoginScreen() {
           </View>
           
           <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-100 mb-2">
-            Scale Verb
+            Escala Verbo Zona Norte
           </Text>
           <Text className="text-gray-600 dark:text-zinc-400 text-center">
             Gerencie suas escalas de forma simples
