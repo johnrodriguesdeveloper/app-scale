@@ -2,7 +2,7 @@ import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Linking, Mo
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { LogIn, UserPlus, Mail, Lock, AlertTriangle } from 'lucide-react-native';
+import { LogIn, UserPlus, Mail, Lock, AlertTriangle, Calendar } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 
 export default function LoginScreen() {
@@ -71,12 +71,13 @@ export default function LoginScreen() {
         
         <View className="items-center mb-12">
           <View className="bg-blue-600 rounded-full p-4 mb-4 shadow-lg shadow-blue-900/20">
-            <LogIn size={32} color="white" />
+            <Calendar size={32} color="white" />
           </View>
           
           <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-100 mb-2">
-            Escala Verbo Zona Norte
-          </Text>
+            Escala Verbo <br />Zona Norte
+          </Text> 
+        
           <Text className="text-gray-600 dark:text-zinc-400 text-center">
             Gerencie suas escalas de forma simples
           </Text>
