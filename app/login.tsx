@@ -2,7 +2,7 @@ import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Linking, Mo
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { LogIn, UserPlus, Mail, Lock, AlertTriangle, Calendar } from 'lucide-react-native';
+import { LogIn, UserPlus, Mail, Lock, AlertTriangle, Calendar, Eye, EyeOff } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 
 export default function LoginScreen() {
@@ -12,6 +12,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // NOVO ESTADO AQUI
 
   // Estados do Modal
   const [modalVisible, setModalVisible] = useState(false);
@@ -22,7 +23,7 @@ export default function LoginScreen() {
     setModalVisible(true);
   };
 
- const handleSignIn = async () => {
+  const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) {
       showErrorModal('Atenção', 'Por favor, preencha todos os campos.');
       return;
@@ -36,7 +37,6 @@ export default function LoginScreen() {
       });
 
       if (error) {
-        // Agora o Supabase vai nos mandar o erro correto!
         if (error.message === 'Email not confirmed') {
           showErrorModal(
             'Email não verificado', 
@@ -65,7 +65,6 @@ export default function LoginScreen() {
   };
 
   return (
-    // Fundo da tela principal
     <View className="flex-1 bg-blue-50 dark:bg-zinc-950">
       <View className="flex-1 justify-center px-6">
         
@@ -86,13 +85,12 @@ export default function LoginScreen() {
         {/* Form */}
         <View>
           {/* Email Input */}
-         <View className="mb-4">
+          <View className="mb-4">
             <View className="flex-row items-center bg-blue-100 dark:bg-zinc-900 rounded-lg border border-blue-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
               <Mail size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                // MUDANÇA AQUI: bg-transparent e outline-none
                 className="flex-1 text-gray-900 dark:text-zinc-100 text-base bg-transparent outline-none"
-                style={{ backgroundColor: 'transparent' }} // Força a remoção do fundo branco web
+                style={{ backgroundColor: 'transparent' }}
                 placeholder="Email"
                 placeholderTextColor={colorScheme === 'dark' ? '#52525b' : '#9ca3af'}
                 value={email}
@@ -105,27 +103,36 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {/* Password Input */}
+          {/* Password Input COM OLHINHO */}
           <View className="mb-6">
             <View className="flex-row items-center bg-blue-100 dark:bg-zinc-900 rounded-lg border border-blue-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
               <Lock size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                // MUDANÇA AQUI: bg-transparent e outline-none
                 className="flex-1 text-gray-900 dark:text-zinc-100 text-base bg-transparent outline-none"
-                style={{ backgroundColor: 'transparent' }} // Força a remoção do fundo branco web
+                style={{ backgroundColor: 'transparent' }}
                 placeholder="Senha"
                 placeholderTextColor={colorScheme === 'dark' ? '#52525b' : '#9ca3af'}
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword} // MUDANÇA AQUI
                 autoCapitalize="none"
                 autoComplete="password"
                 editable={!loading}
               />
+              <TouchableOpacity 
+                onPress={() => setShowPassword(!showPassword)}
+                className="p-1 ml-2"
+              >
+                {showPassword ? (
+                  <EyeOff size={20} className="text-gray-500 dark:text-zinc-400" />
+                ) : (
+                  <Eye size={20} className="text-gray-500 dark:text-zinc-400" />
+                )}
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* Buttons... (sem alterações) */}
+          {/* Buttons */}
           <TouchableOpacity
             onPress={handleSignIn}
             disabled={loading}
@@ -172,7 +179,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Modal de Erro (mantido do passo anterior) */}
+      {/* Modal de Erro */}
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View className="flex-1 bg-black/60 justify-center items-center p-4">
           <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
