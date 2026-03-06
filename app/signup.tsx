@@ -2,7 +2,7 @@ import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, Scro
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { UserPlus, Mail, Lock, User, ArrowLeft, CheckCircle, AlertTriangle } from 'lucide-react-native';
+import { UserPlus, Mail, Lock, User, ArrowLeft, CheckCircle, AlertTriangle, Eye, EyeOff } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 
 export default function SignUpScreen() {
@@ -14,6 +14,10 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // NOVOS ESTADOS AQUI
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // --- ESTADOS DO MODAL ---
   const [modalVisible, setModalVisible] = useState(false);
@@ -30,14 +34,11 @@ export default function SignUpScreen() {
 
   const handleCloseModal = () => {
     setModalVisible(false);
-    // Se foi sucesso, redireciona para login ao fechar o modal
     if (modalConfig.type === 'success') {
       router.replace('/login');
     }
   };
-  // ------------------------
 
-  // Estados de erro para validação
   const [errors, setErrors] = useState({
     fullName: '',
     email: '',
@@ -45,7 +46,6 @@ export default function SignUpScreen() {
     confirmPassword: '',
   });
 
-  // Função para validar senha
   const validatePassword = (pwd: string): string => {
     if (pwd.length < 8) {
       return 'A senha deve ter no mínimo 8 caracteres';
@@ -59,7 +59,6 @@ export default function SignUpScreen() {
     return '';
   };
 
-  // Validar campos em tempo real
   const validateField = (field: string, value: string, currentPassword?: string) => {
     const newErrors = { ...errors };
     const pwdToCompare = currentPassword !== undefined ? currentPassword : password;
@@ -86,7 +85,6 @@ export default function SignUpScreen() {
     setErrors(newErrors);
   };
 
-  // Verificar se o formulário é válido
   const isFormValid = (): boolean => {
     return (
       fullName.trim() !== '' &&
@@ -163,7 +161,8 @@ export default function SignUpScreen() {
             <View className="flex-row items-center bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
               <User size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
+                className="flex-1 text-gray-900 dark:text-zinc-100 text-base outline-none bg-transparent"
+                style={{ backgroundColor: 'transparent' }}
                 placeholder="Nome Completo"
                 placeholderTextColor="#9ca3af"
                 value={fullName}
@@ -185,7 +184,8 @@ export default function SignUpScreen() {
             <View className="flex-row items-center bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
               <Mail size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
+                className="flex-1 text-gray-900 dark:text-zinc-100 text-base outline-none bg-transparent"
+                style={{ backgroundColor: 'transparent' }}
                 placeholder="Email"
                 placeholderTextColor="#9ca3af"
                 value={email}
@@ -204,12 +204,13 @@ export default function SignUpScreen() {
             ) : null}
           </View>
 
-          {/* Password Input */}
+          {/* Password Input COM OLHINHO */}
           <View className="mb-4">
             <View className="flex-row items-center bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
               <Lock size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
+                className="flex-1 text-gray-900 dark:text-zinc-100 text-base outline-none bg-transparent"
+                style={{ backgroundColor: 'transparent' }}
                 placeholder="Senha"
                 placeholderTextColor="#9ca3af"
                 value={password}
@@ -218,23 +219,34 @@ export default function SignUpScreen() {
                   validateField('password', text);
                   if (confirmPassword) validateField('confirmPassword', confirmPassword, text);
                 }}
-                secureTextEntry
+                secureTextEntry={!showPassword} // MUDANÇA AQUI
                 autoCapitalize="none"
                 autoComplete="password"
                 editable={!loading}
               />
+              <TouchableOpacity 
+                onPress={() => setShowPassword(!showPassword)}
+                className="p-1 ml-2"
+              >
+                {showPassword ? (
+                  <EyeOff size={20} className="text-gray-500 dark:text-zinc-400" />
+                ) : (
+                  <Eye size={20} className="text-gray-500 dark:text-zinc-400" />
+                )}
+              </TouchableOpacity>
             </View>
             {errors.password ? (
               <Text className="text-red-500 text-sm mt-1 ml-1">{errors.password}</Text>
             ) : null}
           </View>
 
-          {/* Confirm Password Input */}
+          {/* Confirm Password Input COM OLHINHO */}
           <View className="mb-6">
             <View className="flex-row items-center bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
               <Lock size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
               <TextInput
-                className="flex-1 text-gray-900 dark:text-zinc-100 text-base"
+                className="flex-1 text-gray-900 dark:text-zinc-100 text-base outline-none bg-transparent"
+                style={{ backgroundColor: 'transparent' }}
                 placeholder="Confirmar Senha"
                 placeholderTextColor="#9ca3af"
                 value={confirmPassword}
@@ -242,11 +254,21 @@ export default function SignUpScreen() {
                   setConfirmPassword(text);
                   validateField('confirmPassword', text, password);
                 }}
-                secureTextEntry
+                secureTextEntry={!showConfirmPassword} // MUDANÇA AQUI
                 autoCapitalize="none"
                 autoComplete="password"
                 editable={!loading}
               />
+              <TouchableOpacity 
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="p-1 ml-2"
+              >
+                {showConfirmPassword ? (
+                  <EyeOff size={20} className="text-gray-500 dark:text-zinc-400" />
+                ) : (
+                  <Eye size={20} className="text-gray-500 dark:text-zinc-400" />
+                )}
+              </TouchableOpacity>
             </View>
             {errors.confirmPassword ? (
               <Text className="text-red-500 text-sm mt-1 ml-1">{errors.confirmPassword}</Text>
