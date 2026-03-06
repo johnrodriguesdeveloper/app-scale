@@ -32,9 +32,9 @@ export default function DepartmentRosterScreen() {
   const [members, setMembers] = useState<any[]>([]);
   
   // Filtro e Seleção
-  const [hiddenUserIds, setHiddenUserIds] = useState<string[]>([]);
+  const [unavailableUsers, setUnavailableUsers] = useState<{user_id: string, service_day_id: string | null}[]>([]); // ATUALIZADO
   const [busyUsers, setBusyUsers] = useState<{user_id: string, service_day_id: string}[]>([]);
-  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null); // Novo: Saber pra qual culto estamos escalando
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null); // Saber pra qual culto estamos escalando
   const [selectedFunctionId, setSelectedFunctionId] = useState<string | null>(null);
   const [selectedFunctionName, setSelectedFunctionName] = useState<string>('');
 
@@ -72,7 +72,7 @@ export default function DepartmentRosterScreen() {
         }, 100);
       }
     }
-  }, [currentDate, allServiceDays]); // Dependência ajustada
+  }, [currentDate, allServiceDays]); 
 
   const getDaysInMonth = () => {
     const start = startOfMonth(currentDate);
@@ -131,7 +131,6 @@ export default function DepartmentRosterScreen() {
 
   const fetchRosterForDate = async (date: Date) => {
     const formattedDate = format(date, 'yyyy-MM-dd');
-    // IMPORTANTE: Buscamos service_day_id para saber em qual card colocar
     const { data } = await supabase
       .from('rosters')
       .select(`
@@ -143,24 +142,25 @@ export default function DepartmentRosterScreen() {
     if (data) setRosterEntries(data);
   };
 
-const calculateHiddenUsers = async (date: Date) => {
+  const calculateHiddenUsers = async (date: Date) => {
     try {
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      // 1. Exceções (Indisponibilidade pontual do membro)
+      // 1. Exceções (Indisponibilidade pontual do membro) - ATUALIZADO PARA FILTRAR POR CULTO
       const { data: exceptions } = await supabase
         .from('availability_exceptions')
-        .select('user_id, is_available')
+        .select('user_id, service_day_id, is_available')
         .eq('specific_date', dateStr);
 
-      const hiddenSet = new Set<string>();
-      members.forEach(member => {
-        const userException = exceptions?.find(e => e.user_id === member.user_id);
-        if (userException && !userException.is_available) {
-          hiddenSet.add(member.user_id);
-        }
-      });
-      setHiddenUserIds(Array.from(hiddenSet));
+      // Filtra apenas quem disse que NÃO está disponível e guarda qual o culto
+      const unavailableList = exceptions
+        ?.filter(e => e.is_available === false)
+        .map(e => ({
+          user_id: e.user_id,
+          service_day_id: e.service_day_id
+        })) || [];
+
+      setUnavailableUsers(unavailableList);
 
       // 2. Conflitos (Buscar todas as escalas em TODOS os departamentos neste dia)
       const { data: conflicts } = await supabase
@@ -184,7 +184,6 @@ const calculateHiddenUsers = async (date: Date) => {
     }
   };
 
-  // --- CORREÇÃO DO BOTÃO VOLTAR ---
   const handleBack = () => {
     // Força a volta para o DETALHE do departamento atual
     router.push({
@@ -193,7 +192,7 @@ const calculateHiddenUsers = async (date: Date) => {
     });
   };
 
- const handleAddMember = async (memberId: string) => {
+  const handleAddMember = async (memberId: string) => {
     if (!selectedFunctionId || !selectedServiceId) return;
 
     try {
@@ -207,14 +206,14 @@ const calculateHiddenUsers = async (date: Date) => {
 
       if (error) throw error;
 
-      // SUCESSO: Apenas fecha o modal e recarrega os dados (sem avisos chatos)
+      // SUCESSO: Apenas fecha o modal e recarrega os dados
       setShowMemberSelect(false);
       fetchRosterForDate(selectedDate);
       
     } catch (err: any) {
       console.error("Erro detalhado:", err);
       
-      // ERRO: Mostra o alerta de forma compatível com a Web para podermos debugar
+      // ERRO: Mostra o alerta de forma compatível
       const msg = err.message || JSON.stringify(err);
       if (Platform.OS === 'web') {
         window.alert(`Erro ao escalar: ${msg}`);
@@ -229,14 +228,18 @@ const calculateHiddenUsers = async (date: Date) => {
     fetchRosterForDate(selectedDate);
   };
 
- const filteredMembers = members.filter(member => {
+  const filteredMembers = members.filter(member => {
     // 1. O membro tem a função necessária? (ex: é baixista?)
     const hasFunction = member.member_functions?.some(
       (mf: any) => mf.function_id === selectedFunctionId
     );
     
-    // 2. Ele marcou que NÃO PODE neste dia inteiro?
-    const isAvailable = !hiddenUserIds.includes(member.user_id);
+    // 2. Ele marcou que NÃO PODE neste culto específico? - ATUALIZADO
+    // Bloqueia se o ID do culto bater, ou se for null (indisponível o dia todo)
+    const isAvailable = !unavailableUsers.some(
+      u => u.user_id === member.user_id && 
+      (u.service_day_id === selectedServiceId || u.service_day_id === null)
+    );
     
     // 3. Ele JÁ ESTÁ ESCALADO em outro departamento exatamente NESTE CULTO?
     const isAlreadyBusyInThisService = busyUsers.some(
