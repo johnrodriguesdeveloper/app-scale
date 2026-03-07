@@ -17,13 +17,22 @@ export interface DepartmentMember {
     email?: string;
     avatar_url?: string;
   };
-  department_functions?: {
-    name: string;
-  };
+  member_functions?: {
+    department_functions: {
+      id: string;
+      name: string;
+    };
+  }[];
 }
 
 export interface DepartmentFunction {
   id: string;
   name: string;
   description?: string;
+}
+
+export interface Profile {
+  id: string;
+  full_name: string;
+  email?: string;
 }
