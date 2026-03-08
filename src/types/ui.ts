@@ -20,3 +20,11 @@ export interface PromptModalProps {
   onCancel: () => void;
   confirmButtonColor?: string;
 }
+
+export interface FeedbackModalProps {
+  visible: boolean;
+  type: 'success' | 'error';
+  title: string;
+  message: string;
+  onClose: () => void;
+}
