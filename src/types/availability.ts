@@ -7,5 +7,6 @@ export interface AvailabilityRoutine {
 export interface AvailabilityException {
   user_id: string;
   specific_date: string;
+  service_day_id?: string;
   is_available: boolean;
 }

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, isBefore, parse } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay, getDate, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { getTargetMonthDate } from '@/utils/getTargetMonthDate';
 import { ServiceDay, AvailabilityRoutine, AvailabilityException } from '@/types';
 
 export const fullDayNames = [
@@ -10,118 +11,114 @@ export const fullDayNames = [
 ];
 
 export function useAvailability() {
-  const minDate = startOfMonth(addMonths(new Date(), 1));
-  const [currentDate, setCurrentDate] = useState(minDate);
+  const minDate = getTargetMonthDate(); 
+
+  const [currentMonth, setCurrentMonth] = useState(minDate);
   const [serviceDays, setServiceDays] = useState<ServiceDay[]>([]);
   const [availability, setAvailability] = useState<AvailabilityRoutine[]>([]);
   const [monthExceptions, setMonthExceptions] = useState<AvailabilityException[]>([]);
+  
+  const [expandedCalendar, setExpandedCalendar] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<{ [key: string]: boolean }>({});
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     try {
-      const { data: serviceData, error: serviceError } = await supabase
+      const { data: serviceData } = await supabase
         .from('service_days')
         .select('*')
         .order('day_of_week', { ascending: true });
 
-      if (serviceError) throw serviceError;
       if (serviceData) setServiceDays(serviceData);
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: availabilityData, error: availabilityError } = await supabase
+      const { data: routineData } = await supabase
         .from('availability_routine')
         .select('*')
         .eq('user_id', user.id);
 
-      if (availabilityError) throw availabilityError;
-      if (availabilityData) setAvailability(availabilityData);
+      if (routineData) setAvailability(routineData);
+
     } catch (error) {
-      Alert.alert('Erro', 'Não foi possível carregar os dados.');
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function loadMonthExceptions() {
+  const loadMonthExceptions = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const startOfMonthDate = startOfMonth(currentDate);
-      const endOfMonthDate = endOfMonth(currentDate);
+      const start = startOfMonth(currentMonth);
+      const end = endOfMonth(currentMonth);
 
-      const { data: exceptionsData, error: exceptionsError } = await supabase
+      const { data } = await supabase
         .from('availability_exceptions')
         .select('*')
         .eq('user_id', user.id)
-        .gte('specific_date', format(startOfMonthDate, 'yyyy-MM-dd'))
-        .lte('specific_date', format(endOfMonthDate, 'yyyy-MM-dd'));
+        .gte('specific_date', start.toISOString())
+        .lte('specific_date', end.toISOString());
 
-      if (exceptionsError) throw exceptionsError;
-      if (exceptionsData) setMonthExceptions(exceptionsData);
+      if (data) setMonthExceptions(data);
+
     } catch (error) {
-      Alert.alert('Erro', 'Não foi possível carregar as exceções.');
     }
-  }
+  }, [currentMonth]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   useEffect(() => {
     if (serviceDays.length > 0) {
       loadMonthExceptions();
     }
-  }, [currentDate, serviceDays]);
+  }, [currentMonth, serviceDays, loadMonthExceptions]);
 
-  const handlePrevMonth = () => {
-    const prevMonth = subMonths(currentDate, 1);
-    if (isBefore(prevMonth, minDate)) {
-      Alert.alert("Bloqueado", "Você só pode alterar a disponibilidade a partir do próximo mês.");
-      return;
+  useEffect(() => {
+    if (serviceDays.length > 0) {
+      const start = startOfMonth(currentMonth);
+      const end = endOfMonth(currentMonth);
+      const daysInterval = eachDayOfInterval({ start, end });
+      const calendarItems: any[] = [];
+
+      daysInterval.forEach(date => {
+        const dayOfWeek = getDay(date);
+        const daysServices = serviceDays.filter(s => s.day_of_week === dayOfWeek);
+
+        daysServices.forEach(service => {
+          const routine = availability.find(r => r.service_day_id === service.id);
+          const isRoutineAvailable = routine ? routine.is_available : true; 
+
+          const dateStr = format(date, 'yyyy-MM-dd');
+          const exception = monthExceptions.find(e => 
+            e.specific_date === dateStr && 
+            (e.service_day_id === service.id || e.service_day_id === null)
+          );
+
+          const finalStatus = exception ? exception.is_available : isRoutineAvailable;
+
+          calendarItems.push({
+            date: date,
+            dateStr: dateStr,
+            service: service,
+            isAvailable: finalStatus,
+            isException: !!exception,
+            key: `${dateStr}-${service.id}`
+          });
+        });
+      });
+
+      setExpandedCalendar(calendarItems);
     }
-    setCurrentDate(prevMonth);
-  };
+  }, [availability, monthExceptions, currentMonth, serviceDays]);
 
-  const handleNextMonth = () => {
-    setCurrentDate(addMonths(currentDate, 1));
-  };
-
-  const isAvailable = (serviceDayId: string) => {
-    const dayAvailability = availability.find(a => a.service_day_id === serviceDayId);
-    return dayAvailability ? dayAvailability.is_available : true;
-  };
-
-  const getDayAvailabilityForDate = (date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const exception = monthExceptions.find(e => e.specific_date === dateStr);
-    
-
-    if (exception) return exception.is_available;
-    
-
-    const dayOfWeek = getDay(date);
-    const dayServiceDays = serviceDays.filter(sd => sd.day_of_week === dayOfWeek);
-    
-    if (dayServiceDays.length === 0) return true;
-
-    return dayServiceDays.some(sd => isAvailable(sd.id));
-  };
-
-  const getFilteredDaysInMonth = () => {
-    const start = startOfMonth(currentDate);
-    const end = endOfMonth(currentDate);
-    const allDays = eachDayOfInterval({ start, end });
-    const serviceDayOfWeeks = serviceDays.map(sd => sd.day_of_week);
-    return allDays.filter(day => serviceDayOfWeeks.includes(getDay(day)));
-  };
-
-  const handleToggleRoutine = async (serviceDayId: string, newValue: boolean) => {
+  const handleToggleRoutine = async (serviceDayId: string, value: boolean) => {
     setSaving(prev => ({ ...prev, [serviceDayId]: true }));
-
+    
     const targetService = serviceDays.find(sd => sd.id === serviceDayId);
     if (!targetService) {
       setSaving(prev => ({ ...prev, [serviceDayId]: false }));
@@ -130,14 +127,15 @@ export function useAvailability() {
 
     const targetDayOfWeek = targetService.day_of_week;
 
-
+    
     setAvailability(prev => {
       const filtered = prev.filter(a => a.service_day_id !== serviceDayId);
-      return [...filtered, { user_id: 'temp', service_day_id: serviceDayId, is_available: newValue }];
+      return [...filtered, { user_id: 'temp', service_day_id: serviceDayId, is_available: value }];
     });
 
+
     setMonthExceptions(prev => prev.filter(e => {
-  
+
       const exceptionDate = parse(e.specific_date, 'yyyy-MM-dd', new Date());
       return getDay(exceptionDate) !== targetDayOfWeek;
     }));
@@ -146,13 +144,12 @@ export function useAvailability() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-   
-      const { error: routineError } = await supabase
-        .from('availability_routine')
-        .upsert({ user_id: user.id, service_day_id: serviceDayId, is_available: newValue }, { onConflict: 'user_id,service_day_id' });
+
+      const { error: routineError } = await supabase.from('availability_routine').upsert({
+        user_id: user.id, service_day_id: serviceDayId, is_available: value
+      }, { onConflict: 'user_id,service_day_id' });
 
       if (routineError) throw routineError;
-
 
       const todayStr = format(new Date(), 'yyyy-MM-dd');
       const { data: futureExceptions } = await supabase
@@ -162,14 +159,12 @@ export function useAvailability() {
         .gte('specific_date', todayStr);
 
       if (futureExceptions && futureExceptions.length > 0) {
- 
         const datesToDelete = futureExceptions
           .filter(e => {
             const exceptionDate = parse(e.specific_date, 'yyyy-MM-dd', new Date());
             return getDay(exceptionDate) === targetDayOfWeek;
           })
           .map(e => e.specific_date);
-
 
         if (datesToDelete.length > 0) {
           await supabase
@@ -180,8 +175,8 @@ export function useAvailability() {
         }
       }
 
-    } catch (error) {
-
+    } catch (e) { 
+      Alert.alert("Erro", "Não foi possível sincronizar a rotina.");
       await loadData();
     } finally {
       await loadMonthExceptions();
@@ -189,49 +184,59 @@ export function useAvailability() {
     }
   };
 
-  const handleToggleException = async (date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const currentAvailability = getDayAvailabilityForDate(date);
-    const newAvailability = !currentAvailability;
-    
-    setSaving(prev => ({ ...prev, [dateStr]: true }));
-    
-
-    setMonthExceptions(prev => {
-      const filtered = prev.filter(e => e.specific_date !== dateStr);
-      return [...filtered, { user_id: 'temp', specific_date: dateStr, is_available: newAvailability }];
-    });
+  const handleToggleException = async (item: any, newValue: boolean) => {
+    const itemKey = item.key;
+    setSaving(prev => ({ ...prev, [itemKey]: true }));
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      const optimisticException = {
+        user_id: user.id,
+        specific_date: item.dateStr,
+        service_day_id: item.service.id,
+        is_available: newValue
+      };
+
+      setMonthExceptions(prev => {
+        const filtered = prev.filter(e => 
+          !(e.specific_date === item.dateStr && e.service_day_id === item.service.id)
+        );
+        return [...filtered, optimisticException];
+      });
+
       const { error } = await supabase
         .from('availability_exceptions')
-        .upsert({ user_id: user.id, specific_date: dateStr, is_available: newAvailability }, { onConflict: 'user_id,specific_date' });
+        .upsert(optimisticException, {
+          onConflict: 'user_id,specific_date,service_day_id'
+        });
 
       if (error) throw error;
+
     } catch (error) {
-      Alert.alert('Erro', 'Não foi possível salvar a alteração.');
+      Alert.alert("Erro", "Não foi possível salvar.");
+      loadMonthExceptions();
     } finally {
-      await loadMonthExceptions();
-      setSaving(prev => ({ ...prev, [dateStr]: false }));
+      setSaving(prev => ({ ...prev, [itemKey]: false }));
     }
   };
 
+  const handlePrevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
+  const handleNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+
   return {
-    currentDate,
-    minDate,
+    currentMonth,
     serviceDays,
+    availability,
+    expandedCalendar,
     loading,
     saving,
-    isAtMinDate: isSameDay(startOfMonth(currentDate), minDate),
+    isAtMinDate: isSameDay(startOfMonth(currentMonth), minDate),
+    dayOfMonth: getDate(new Date()),
     handlePrevMonth,
     handleNextMonth,
-    isAvailable,
-    getDayAvailabilityForDate,
-    getFilteredDaysInMonth,
-    handleToggleRoutine,
-    handleToggleException
+    handleToggleException,
+    handleToggleRoutine
   };
 }
