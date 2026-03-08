@@ -1,149 +1,26 @@
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Linking, Platform } from 'react-native';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Calendar, MapPin, X, Users, MessageCircle } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
-import { format, parseISO, startOfDay } from 'date-fns';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Calendar, MapPin, X, Users, MessageCircle } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
-
-interface Scale {
-  id: string;
-  schedule_date: string;
-  department_id: string;
-  service_day_id: string;
-  department_functions: any;
-  departments: any;
-  service_days?: any;
-}
-
-interface TeamMember {
-  id: string;
-  function_name: string;
-  member_name: string;
-  member_phone: string | null;
-}
+import { useMyScales } from '@/features/my-scales/useMyScales';
+import { Scale } from '@/types';
 
 export default function MyScalesScreen() {
-  const router = useRouter();
   const { colorScheme } = useColorScheme();
   
-  const [scales, setScales] = useState<Scale[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // --- ESTADOS DO MODAL E DA EQUIPE ---
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedScale, setSelectedScale] = useState<Scale | null>(null);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [loadingTeam, setLoadingTeam] = useState(false);
-
-  useEffect(() => {
-    fetchMyScales();
-  }, []);
-
-  const fetchMyScales = async () => {
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: memberData } = await supabase
-        .from('department_members')
-        .select('id')
-        .eq('user_id', user.id);
-
-      if (!memberData || memberData.length === 0) {
-        setLoading(false);
-        return;
-      }
-
-      const memberIds = memberData.map(m => m.id);
-      const today = format(startOfDay(new Date()), 'yyyy-MM-dd');
-
-      const { data: scaleData } = await supabase
-        .from('rosters')
-        .select(`
-          id,
-          schedule_date,
-          department_id,
-          service_day_id,
-          department_functions ( name ),
-          departments ( name ),
-          service_days ( name )
-        `)
-        .in('member_id', memberIds)
-        .gte('schedule_date', today)
-        .order('schedule_date', { ascending: true });
-
-      if (scaleData) {
-        setScales(scaleData as Scale[]);
-      }
-    } catch (error) {
-      console.error('Erro ao buscar escalas:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOpenScaleDetails = async (scale: Scale) => {
-    setSelectedScale(scale);
-    setModalVisible(true);
-    setLoadingTeam(true);
-
-    try {
-      const { data } = await supabase
-        .from('rosters')
-        .select(`
-          id,
-          department_functions ( name ),
-          department_members (
-            profiles ( full_name, phone )
-          )
-        `)
-        .eq('department_id', scale.department_id)
-        .eq('schedule_date', scale.schedule_date)
-        .eq('service_day_id', scale.service_day_id);
-
-      if (data) {
-        const team: TeamMember[] = data.map((item: any) => {
-          const funcName = Array.isArray(item.department_functions) ? item.department_functions[0]?.name : item.department_functions?.name;
-          const profile = Array.isArray(item.department_members?.profiles) ? item.department_members.profiles[0] : item.department_members?.profiles;
-          
-          return {
-            id: item.id,
-            function_name: funcName || 'Sem função',
-            member_name: profile?.full_name || 'Usuário',
-            member_phone: profile?.phone || null
-          };
-        });
-
-        team.sort((a, b) => a.function_name.localeCompare(b.function_name));
-        setTeamMembers(team);
-      }
-    } catch (error) {
-      console.error('Erro ao buscar equipe:', error);
-    } finally {
-      setLoadingTeam(false);
-    }
-  };
-
-  const handleOpenWhatsApp = (phone: string | null, name: string) => {
-    if (!phone) return;
-    
-    const cleanNumber = phone.replace(/\D/g, '');
-    const message = `Olá ${name}, vi que estamos escalados juntos!`;
-    const url = `whatsapp://send?phone=55${cleanNumber}&text=${encodeURIComponent(message)}`;
-    
-    Linking.canOpenURL(url).then(supported => {
-      if (supported) {
-        Linking.openURL(url);
-      } else {
-        Linking.openURL(`https://wa.me/55${cleanNumber}?text=${encodeURIComponent(message)}`);
-      }
-    }).catch(err => console.error('Erro ao abrir WhatsApp', err));
-  };
-
-  const getSafeName = (obj: any) => Array.isArray(obj) ? obj[0]?.name : obj?.name;
+  const {
+    scales,
+    loading,
+    modalVisible,
+    setModalVisible,
+    selectedScale,
+    teamMembers,
+    loadingTeam,
+    handleOpenScaleDetails,
+    handleOpenWhatsApp,
+    getSafeName
+  } = useMyScales();
 
   const renderScaleCard = (scale: Scale) => {
     const date = parseISO(scale.schedule_date);
@@ -196,7 +73,6 @@ export default function MyScalesScreen() {
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
-      {/* Header */}
       <View className="bg-white dark:bg-zinc-900 px-6 py-7 border-b border-gray-200 dark:border-zinc-800 pt-14">
         <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Minhas Escalas</Text>
       </View>
@@ -222,12 +98,10 @@ export default function MyScalesScreen() {
         )}
       </ScrollView>
 
-      {/* --- NOVO MODAL ESTILO CONFIRMAÇÃO --- */}
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View className="flex-1 bg-black/60 justify-center items-center p-4">
           <View className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-3xl overflow-hidden shadow-xl max-h-[85%]">
             
-            {/* Header do Modal Centralizado */}
             <View className="p-5 border-b border-gray-100 dark:border-zinc-800 flex-row justify-between items-center bg-gray-50 dark:bg-zinc-800/50">
               <View className="flex-1">
                 <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">
@@ -244,7 +118,6 @@ export default function MyScalesScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Lista da Equipe */}
             <ScrollView className="p-4" contentContainerStyle={{ paddingBottom: 10 }}>
               {loadingTeam ? (
                 <View className="items-center py-10">
@@ -285,7 +158,6 @@ export default function MyScalesScreen() {
               )}
             </ScrollView>
 
-            {/* Botão Fechar no rodapé do modal */}
             <View className="p-4 border-t border-gray-100 dark:border-zinc-800">
               <TouchableOpacity 
                 onPress={() => setModalVisible(false)}
