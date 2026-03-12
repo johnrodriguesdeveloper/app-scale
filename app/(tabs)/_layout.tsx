@@ -59,8 +59,7 @@ export default function TabLayout() {
     );
   }
 
-  // Cor das divisórias (ajusta conforme o tema)
-  const dividerColor = isDark ? '#27272a' : '#e5e7eb'; // zinc-800 ou gray-200
+  const dividerColor = isDark ? '#27272a' : '#e5e7eb';  
 
   return (
     <Tabs
@@ -73,27 +72,27 @@ export default function TabLayout() {
           backgroundColor: isDark ? '#18181b' : '#ffffff',
           borderTopWidth: 1,
           borderTopColor: dividerColor,
-          height: 85, // Mantém a altura total da barra
+          height: 85, 
           elevation: 10,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: isDark ? 0.2 : 0.05,
           shadowRadius: 8,
-          // ❌ Sem paddingBottom aqui
+         
         },
-        // Opcional: Você pode tentar empurrar todos os ícones de uma vez aqui
+       
         tabBarIconStyle: {
-          marginBottom: 15, // Ajuste esse valor para subir os ícones o quanto precisar
+          marginBottom: 15, 
         }
       }}
     >
-      {/* 1. HOME */}
+
       <Tabs.Screen
         name="index"
         options={{
-          // Ícone maior (size 30)
+
           tabBarIcon: ({ color }) => <Home size={30} color={color} />,
-          // Adiciona a divisória na direita
+
           tabBarItemStyle: {
             borderRightWidth: 1,
             borderRightColor: dividerColor,
@@ -101,7 +100,6 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 2. AGENDA */}
       <Tabs.Screen
         name="my-scales"
         options={{
@@ -113,7 +111,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 3. DEPARTAMENTOS */}
+
       <Tabs.Screen
         name="departments"
         options={{
@@ -125,7 +123,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* --- TELAS OCULTAS --- */}
+
       <Tabs.Screen
         name="departments/[id]"
         options={{ href: null }}
@@ -138,9 +136,7 @@ export default function TabLayout() {
         name="settings/schedule"
         options={{ href: null }}
       />
-      {/* ------------------- */}
 
-      {/* 4. CONFIGURAÇÕES (O último não tem borda na direita) */}
       <Tabs.Screen
         name="settings"
        options={{
