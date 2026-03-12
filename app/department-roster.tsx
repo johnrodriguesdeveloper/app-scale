@@ -1,455 +1,194 @@
-import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList, Platform } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal, FlatList } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ChevronLeft, ChevronRight, Trash2, X, Filter, Clock } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay } from 'date-fns';
+import { ArrowLeft, ChevronLeft, ChevronRight, X, Filter, Trash2 } from 'lucide-react-native';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useColorScheme } from 'nativewind';
+import { useDepartmentRosterGrid } from '@/features/roster/useDepartmentRosterGrid';
 
-interface ServiceDay {
-  id: string;
-  day_of_week: number;
-  name: string;
-}
-
-export default function DepartmentRosterScreen() {
+export default function DepartmentRosterGridScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const departmentId = String(params.departmentId);
-  const departmentName = String(params.departmentName || 'Escala');
-  
-  const scrollViewRef = useRef<ScrollView>(null);
+  const { departmentId, departmentName } = useLocalSearchParams<{ departmentId: string; departmentName: string; }>();
+  const { colorScheme } = useColorScheme();
+  const iconColor = colorScheme === 'dark' ? '#e4e4e7' : '#374151';
 
-  // Estados
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  
-  // Dados
-  const [allServiceDays, setAllServiceDays] = useState<ServiceDay[]>([]); // Todos os serviços cadastrados
-  const [currentDayServices, setCurrentDayServices] = useState<ServiceDay[]>([]); // Serviços do dia selecionado
-  const [functions, setFunctions] = useState<any[]>([]);
-  const [rosterEntries, setRosterEntries] = useState<any[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
-  
-  // Filtro e Seleção
-  const [unavailableUsers, setUnavailableUsers] = useState<{user_id: string, service_day_id: string | null}[]>([]); // ATUALIZADO
-  const [busyUsers, setBusyUsers] = useState<{user_id: string, service_day_id: string}[]>([]);
-  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null); // Saber pra qual culto estamos escalando
-  const [selectedFunctionId, setSelectedFunctionId] = useState<string | null>(null);
-  const [selectedFunctionName, setSelectedFunctionName] = useState<string>('');
+  const {
+    currentMonth,
+    loading,
+    gridColumns,
+    functions,
+    showMemberSelect,
+    setShowMemberSelect,
+    selectedCell,
+    setSelectedCell,
+    saving,
+    prevMonth,
+    nextMonth,
+    getRosterInCell,
+    getFilteredMembers,
+    handleAddMember,
+    handleRemoveDirectly
+  } = useDepartmentRosterGrid(departmentId);
 
-  // UI States
-  const [loading, setLoading] = useState(true);
-  const [calculating, setCalculating] = useState(false);
-  const [showMemberSelect, setShowMemberSelect] = useState(false);
-
-  useEffect(() => {
-    loadInitialData();
-  }, [departmentId]);
-
-  useEffect(() => {
-    if (selectedDate && allServiceDays.length > 0) {
-      updateServicesForSelectedDate(selectedDate);
-      fetchRosterForDate(selectedDate);
-      
-      if (members.length > 0) {
-        setCalculating(true);
-        calculateHiddenUsers(selectedDate).finally(() => setCalculating(false));
-      }
-    }
-  }, [selectedDate, allServiceDays, members]);
-
-  // Scroll Automático do Calendário
-  useEffect(() => {
-    if (daysToShow.length > 0 && scrollViewRef.current) {
-      const index = daysToShow.findIndex(day => isSameDay(day, selectedDate));
-      if (index !== -1) {
-        // Pequeno delay para garantir layout
-        setTimeout(() => {
-          try {
-             scrollViewRef.current?.scrollTo({ x: index * 68, animated: true });
-          } catch (e) {}
-        }, 100);
-      }
-    }
-  }, [currentDate, allServiceDays]); 
-
-  const getDaysInMonth = () => {
-    const start = startOfMonth(currentDate);
-    const end = endOfMonth(currentDate);
-    const days = eachDayOfInterval({ start, end });
-    // Filtra apenas dias que tenham algum serviço cadastrado
-    const serviceWeekDays = allServiceDays.map(sd => sd.day_of_week);
-    return days.filter(day => serviceWeekDays.includes(getDay(day)));
-  };
-
-  const daysToShow = getDaysInMonth();
-
-  const loadInitialData = async () => {
-    setLoading(true);
-    await fetchServiceDays(); // Busca todos os tipos de serviço
-    await Promise.all([
-      fetchFunctions(),
-      fetchMembers()
-    ]);
-    setLoading(false);
-  };
-
-  const fetchServiceDays = async () => {
-    const { data } = await supabase.from('service_days').select('*').order('day_of_week');
-    if (data) setAllServiceDays(data);
-  };
-
-  // Atualiza a lista de cultos (seções) baseada no dia da semana escolhido
-  const updateServicesForSelectedDate = (date: Date) => {
-    const dayOfWeek = getDay(date);
-    const services = allServiceDays.filter(sd => sd.day_of_week === dayOfWeek);
-    setCurrentDayServices(services);
-  };
-
-  const fetchFunctions = async () => {
-    const { data } = await supabase
-      .from('department_functions')
-      .select('*')
-      .eq('department_id', departmentId)
-      .order('name');
-    if (data) setFunctions(data);
-  };
-
-  const fetchMembers = async () => {
-    const { data } = await supabase
-      .from('department_members')
-      .select(`
-        id, user_id,
-        member_functions ( function_id ), 
-        profiles:user_id ( full_name, avatar_url )
-      `)
-      .eq('department_id', departmentId);
-      
-    if (data) setMembers(data);
-  };
-
-  const fetchRosterForDate = async (date: Date) => {
-    const formattedDate = format(date, 'yyyy-MM-dd');
-    const { data } = await supabase
-      .from('rosters')
-      .select(`
-        id, function_id, member_id, service_day_id,
-        department_members:member_id ( user_id, profiles:user_id ( full_name ) )
-      `)
-      .eq('department_id', departmentId)
-      .eq('schedule_date', formattedDate);
-    if (data) setRosterEntries(data);
-  };
-
-  const calculateHiddenUsers = async (date: Date) => {
-    try {
-      const dateStr = format(date, 'yyyy-MM-dd');
-      
-      // 1. Exceções (Indisponibilidade pontual do membro) - ATUALIZADO PARA FILTRAR POR CULTO
-      const { data: exceptions } = await supabase
-        .from('availability_exceptions')
-        .select('user_id, service_day_id, is_available')
-        .eq('specific_date', dateStr);
-
-      // Filtra apenas quem disse que NÃO está disponível e guarda qual o culto
-      const unavailableList = exceptions
-        ?.filter(e => e.is_available === false)
-        .map(e => ({
-          user_id: e.user_id,
-          service_day_id: e.service_day_id
-        })) || [];
-
-      setUnavailableUsers(unavailableList);
-
-      // 2. Conflitos (Buscar todas as escalas em TODOS os departamentos neste dia)
-      const { data: conflicts } = await supabase
-        .from('rosters')
-        .select(`
-          service_day_id,
-          department_members!inner ( user_id )
-        `)
-        .eq('schedule_date', dateStr);
-      
-      // Mapeia quem está ocupado e em qual culto
-      const busyList = conflicts?.map((c: any) => ({
-        user_id: c.department_members?.user_id,
-        service_day_id: c.service_day_id
-      })) || [];
-
-      setBusyUsers(busyList);
-
-    } catch (error) {
-      console.error("Erro no cálculo:", error);
-    }
-  };
-
-  const handleBack = () => {
-    // Força a volta para o DETALHE do departamento atual
-    router.push({
-        pathname: '/(tabs)/departments/[id]',
-        params: { id: departmentId }
-    });
-  };
-
-  const handleAddMember = async (memberId: string) => {
-    if (!selectedFunctionId || !selectedServiceId) return;
-
-    try {
-      const { error } = await supabase.from('rosters').insert({
-        department_id: departmentId,
-        function_id: selectedFunctionId,
-        member_id: memberId,
-        service_day_id: selectedServiceId, 
-        schedule_date: format(selectedDate, 'yyyy-MM-dd')
-      });
-
-      if (error) throw error;
-
-      // SUCESSO: Apenas fecha o modal e recarrega os dados
-      setShowMemberSelect(false);
-      fetchRosterForDate(selectedDate);
-      
-    } catch (err: any) {
-      console.error("Erro detalhado:", err);
-      
-      // ERRO: Mostra o alerta de forma compatível
-      const msg = err.message || JSON.stringify(err);
-      if (Platform.OS === 'web') {
-        window.alert(`Erro ao escalar: ${msg}`);
-      } else {
-        Alert.alert("Erro ao escalar", msg);
-      }
-    }
-  };
-
-  const handleRemoveFromRoster = async (rosterId: string) => {
-    await supabase.from('rosters').delete().eq('id', rosterId);
-    fetchRosterForDate(selectedDate);
-  };
-
-  const filteredMembers = members.filter(member => {
-    // 1. O membro tem a função necessária? (ex: é baixista?)
-    const hasFunction = member.member_functions?.some(
-      (mf: any) => mf.function_id === selectedFunctionId
-    );
-    
-    // 2. Ele marcou que NÃO PODE neste culto específico? - ATUALIZADO
-    // Bloqueia se o ID do culto bater, ou se for null (indisponível o dia todo)
-    const isAvailable = !unavailableUsers.some(
-      u => u.user_id === member.user_id && 
-      (u.service_day_id === selectedServiceId || u.service_day_id === null)
-    );
-    
-    // 3. Ele JÁ ESTÁ ESCALADO em outro departamento exatamente NESTE CULTO?
-    const isAlreadyBusyInThisService = busyUsers.some(
-      b => b.user_id === member.user_id && b.service_day_id === selectedServiceId
-    );
-    
-    return hasFunction && isAvailable && !isAlreadyBusyInThisService;
-  });
-
-  // Renderiza um Card de Função DENTRO de um serviço específico
-  const renderFunctionCard = (func: any, serviceId: string) => {
-    // Busca entrada no roster que bate com Função, Data E SERVIÇO
-    const entry = rosterEntries.find(e => 
-        e.function_id === func.id && 
-        e.service_day_id === serviceId
-    );
-
-    return (
-      <View key={`${func.id}-${serviceId}`} className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-gray-100 dark:border-zinc-800 mb-2 shadow-sm flex-row items-center justify-between">
-        <View>
-          <Text className="text-gray-500 dark:text-zinc-400 text-xs uppercase font-bold tracking-wider mb-1">{func.name}</Text>
-          {entry ? (
-            <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-lg">
-              {entry.department_members?.profiles?.full_name || 'Usuário'}
-            </Text>
-          ) : (
-            <Text className="text-gray-400 dark:text-zinc-600 italic">Vago</Text>
-          )}
-        </View>
-
-        {entry ? (
-          <TouchableOpacity 
-            onPress={() => handleRemoveFromRoster(entry.id)}
-            className="w-10 h-10 bg-red-50 dark:bg-red-500/10 rounded-full items-center justify-center"
-          >
-            <Trash2 size={18} color="#ef4444" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            onPress={() => {
-              setSelectedFunctionId(func.id);
-              setSelectedFunctionName(func.name);
-              setSelectedServiceId(serviceId); // Guarda o ID do serviço (ex: EBD ou Noite)
-              setShowMemberSelect(true);
-            }}
-            className="px-4 py-2 bg-blue-600 rounded-lg"
-          >
-            <Text className="text-white font-bold text-sm">+ Adicionar</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
+  const filteredMembers = getFilteredMembers();
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
-      
-      {/* Header */}
-      <View className="bg-white dark:bg-zinc-900 px-4 pt-12 pb-4 border-b border-gray-200 dark:border-zinc-800 flex-row items-center justify-between">
+      <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-6 pt-12 pb-4 flex-row items-center justify-between z-10">
         <View className="flex-row items-center">
-          <TouchableOpacity onPress={handleBack} className="mr-3 p-2 bg-gray-100 rounded-lg">
-            <ArrowLeft size={20} color="#374151" />
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/(tabs)/departments/[id]', params: { id: departmentId }})}
+            className="mr-4 p-2 bg-gray-100 dark:bg-zinc-800 rounded-xl"
+          >
+            <ArrowLeft size={20} color={iconColor} />
           </TouchableOpacity>
           <View>
             <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">{departmentName}</Text>
-            <Text className="text-xs text-gray-500 dark:text-zinc-400">Gerenciar Escala</Text>
+            <Text className="text-gray-500 dark:text-zinc-400 text-sm">Escala Mensal</Text>
           </View>
+        </View>
+
+        <View className="flex-row items-center bg-gray-100 dark:bg-zinc-800 rounded-xl p-1">
+          <TouchableOpacity onPress={prevMonth} className="p-2">
+            <ChevronLeft size={20} color={iconColor} />
+          </TouchableOpacity>
+          <Text className="font-bold text-gray-900 dark:text-zinc-100 capitalize px-4 min-w-[140px] text-center">
+            {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+          </Text>
+          <TouchableOpacity onPress={nextMonth} className="p-2">
+            <ChevronRight size={20} color={iconColor} />
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Navegador de Mês */}
-      <View className="flex-row items-center justify-between px-6 py-4 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800">
-        <TouchableOpacity onPress={() => setCurrentDate(subMonths(currentDate, 1))}>
-          <ChevronLeft size={24} color="#9ca3af" />
-        </TouchableOpacity>
-        <Text className="text-lg font-bold text-gray-800 dark:text-zinc-200 capitalize">
-          {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
-        </Text>
-        <TouchableOpacity onPress={() => setCurrentDate(addMonths(currentDate, 1))}>
-          <ChevronRight size={24} color="#9ca3af" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Calendário Horizontal */}
-      <View className="bg-white dark:bg-zinc-900 py-4 shadow-sm mb-1">
-        <ScrollView 
-          ref={scrollViewRef}
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          className="pl-4"
-        >
-          {daysToShow.map((day, index) => {
-            const isSelected = isSameDay(day, selectedDate);
-            return (
-              <TouchableOpacity 
-                key={index}
-                onPress={() => setSelectedDate(day)}
-                className={`items-center justify-center w-14 h-16 rounded-xl mr-3 ${isSelected ? 'bg-blue-600' : 'bg-gray-100 dark:bg-zinc-800'}`}
-              >
-                <Text className={`text-xs mb-1 font-medium capitalize ${isSelected ? 'text-blue-200' : 'text-gray-500 dark:text-zinc-400'}`}>
-                  {format(day, 'EEE', { locale: ptBR }).replace('.', '')}
-                </Text>
-                <Text className={`text-lg font-bold ${isSelected ? 'text-white' : 'text-gray-900 dark:text-zinc-100'}`}>
-                  {format(day, 'd')}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-          <View className="w-6" />
-        </ScrollView>
-      </View>
-
-      {/* Corpo da Escala */}
-      <ScrollView className="flex-1 p-4">
-        
+      <ScrollView className="flex-1 p-4" contentContainerStyle={{ alignItems: 'center' }}>
         {loading ? (
-          <ActivityIndicator color="#2563eb" className="mt-10"/>
+          <View className="py-20 items-center justify-center">
+            <ActivityIndicator size="large" color="#3b82f6" />
+          </View>
         ) : (
-          <>
-            {/* LÓGICA PRINCIPAL: Loop pelos Serviços do Dia */}
-            {currentDayServices.length > 0 ? (
-                currentDayServices.map((service) => (
-                    <View key={service.id} className="mb-8">
-                        {/* Cabeçalho do Serviço (ex: EBD, Culto Noite) */}
-                        <View className="flex-row items-center mb-3">
-                            <Clock size={18} color="#3b82f6" style={{marginRight: 8}} />
-                            <Text className="text-xl font-bold text-gray-800 dark:text-zinc-100">
-                                {service.name}
-                            </Text>
-                        </View>
-
-                        {/* Lista de Funções para este Serviço */}
-                        {functions.length > 0 ? (
-                            functions.map(func => renderFunctionCard(func, service.id))
-                        ) : (
-                            <Text className="text-gray-400 dark:text-zinc-600 italic">Sem funções definidas.</Text>
-                        )}
-                    </View>
-                ))
-            ) : (
-                <View className="items-center justify-center mt-10">
-                    <Text className="text-gray-400 dark:text-zinc-600">Nenhum evento configurado para este dia.</Text>
+          <View className="flex-row flex-wrap justify-center gap-4 max-w-[1400px]">
+            {gridColumns.map((col, index) => (
+              <View key={index} className="w-[320px] bg-white border-2 border-zinc-200 dark:border-zinc-700 mb-2 rounded-sm">
+                
+                <View className="bg-zinc-950 py-1 px-2 items-center justify-center">
+                  <Text className="text-white font-bold text-xs uppercase">
+                    {format(col.date, 'dd')} | {format(col.date, 'EEEE', { locale: ptBR })} {col.service.name}
+                  </Text>
                 </View>
-            )}
-          </>
+
+                {functions.map((func, fIndex) => {
+                  const cellData = getRosterInCell(func.id, col.dateStr, col.service.id);
+                  const isLast = fIndex === functions.length - 1;
+
+                  return (
+                    <View key={func.id} className={`flex-row ${!isLast ? 'border-b-2 border-black' : ''}`}>
+                      <View className="w-[35%] border-r-2 border-black p-1.5 justify-center bg-white">
+                        <Text className="font-bold text-[11px] text-black" numberOfLines={2}>
+                          {func.name}
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedCell({
+                            functionId: func.id,
+                            functionName: func.name,
+                            serviceId: col.service.id,
+                            date: col.date,
+                            currentRosterId: cellData?.id
+                          });
+                          setShowMemberSelect(true);
+                        }}
+                        className="w-[65%] p-1.5 justify-center items-center bg-white"
+                      >
+                        {cellData ? (
+                          <Text className="font-bold text-[11px] text-blue-700 text-center" numberOfLines={2}>
+                            {cellData.member_name}
+                          </Text>
+                        ) : (
+                          <Text className="font-bold text-[11px] text-gray-400 text-center">
+                            --
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
         )}
-        
-        <View className="h-20" />
       </ScrollView>
 
-      {/* Modal de Seleção */}
-      <Modal
-        visible={showMemberSelect}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowMemberSelect(false)}
-      >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-zinc-900 rounded-t-3xl h-[60%] w-full flex overflow-hidden">
-            
+      <Modal visible={showMemberSelect} transparent animationType="fade" onRequestClose={() => setShowMemberSelect(false)}>
+        <View className="flex-1 bg-black/50 justify-center items-center p-4">
+          <View className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm flex overflow-hidden shadow-2xl max-h-[80%]">
             <View className="p-4 border-b border-gray-100 dark:border-zinc-800 flex-row justify-between items-center bg-gray-50 dark:bg-zinc-800">
-              <View>
-                <Text className="text-lg font-bold text-gray-800 dark:text-zinc-200">
-                    Selecionar: {selectedFunctionName}
+              <View className="flex-1 pr-2">
+                <Text className="text-lg font-bold text-gray-900 dark:text-zinc-100">
+                  {selectedCell?.functionName}
                 </Text>
-                <Text className="text-xs text-gray-500 dark:text-zinc-400">
-                  {calculating ? 'Verificando agenda...' : 'Membros disponíveis'}
-                </Text>
+                {selectedCell && (
+                  <Text className="text-xs font-medium text-gray-500 dark:text-zinc-400 mt-1 capitalize">
+                    {format(selectedCell.date, "dd 'de' MMMM", { locale: ptBR })}
+                  </Text>
+                )}
               </View>
-              <TouchableOpacity onPress={() => setShowMemberSelect(false)} className="p-2 bg-white dark:bg-zinc-700 rounded-full">
-                <X size={20} color="#666" />
+              <TouchableOpacity onPress={() => setShowMemberSelect(false)} className="p-2 bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 rounded-full">
+                <X size={18} color={iconColor} />
               </TouchableOpacity>
             </View>
 
-            {/* Lista de Membros no Modal */}
-            <FlatList 
-              data={filteredMembers}
-              keyExtractor={item => item.id}
-              contentContainerStyle={{ padding: 16 }}
-              ListEmptyComponent={
-                <View className="items-center py-10 px-4">
-                  <Filter size={40} color="#ccc" />
-                  <Text className="text-gray-500 dark:text-zinc-400 mt-4 text-center font-bold">Ninguém disponível</Text>
-                  <Text className="text-gray-400 dark:text-zinc-600 text-center mt-1 text-sm">
-                    Todos os membros habilitados estão indisponíveis ou já escalados.
-                  </Text>
-                </View>
-              }
-              renderItem={({ item }) => (
-                <TouchableOpacity 
-                  onPress={() => handleAddMember(item.id)}
-                  className="flex-row items-center p-4 mb-2 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-xl active:bg-blue-50 dark:active:bg-blue-900/20"
+            <ScrollView contentContainerStyle={{ padding: 12 }}>
+              
+              {selectedCell?.currentRosterId && (
+                <TouchableOpacity
+                  onPress={() => handleRemoveDirectly(selectedCell.currentRosterId!)}
+                  disabled={saving}
+                  className="flex-row items-center justify-center p-3 mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl"
                 >
-                  <View className="w-10 h-10 bg-blue-100 dark:bg-blue-500/10 rounded-full items-center justify-center mr-3">
-                    <Text className="text-blue-700 dark:text-blue-400 font-bold text-lg">
-                      {item.profiles?.full_name?.charAt(0) || '?'}
-                    </Text>
-                  </View>
-                  <View>
-                    <Text className="text-gray-900 dark:text-zinc-100 font-semibold text-base">
-                      {item.profiles?.full_name || 'Sem nome'}
-                    </Text>
-                  </View>
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#ef4444" />
+                  ) : (
+                    <>
+                      <Trash2 size={16} color="#ef4444" className="mr-2" />
+                      <Text className="text-red-600 dark:text-red-400 font-bold text-sm">Remover da Escala</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
               )}
-            />
 
+              <Text className="text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-2 ml-1">
+                Disponíveis
+              </Text>
+
+              {filteredMembers.length === 0 ? (
+                <View className="items-center py-8 px-4">
+                  <Filter size={32} color="#cbd5e1" className="mb-2" />
+                  <Text className="text-gray-500 dark:text-zinc-400 text-sm font-bold text-center">Ninguém disponível</Text>
+                </View>
+              ) : (
+                filteredMembers.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    onPress={() => handleAddMember(item.id)}
+                    disabled={saving}
+                    className="flex-row items-center p-3 mb-2 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl"
+                  >
+                    <View className="flex-1">
+                      <Text className="text-gray-900 dark:text-zinc-100 font-bold text-sm">
+                        {item.profiles?.full_name || 'Sem nome'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
+
     </View>
   );
 }

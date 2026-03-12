@@ -6,3 +6,8 @@ export * from './home';
 export * from './my-scales';
 export * from './create-roster';
 export * from './department-leaders';
+export * from './department-roster';
+export * from './department-settings';
+export * from './onboarding';
+export * from './profile';
+export * from './signup';
