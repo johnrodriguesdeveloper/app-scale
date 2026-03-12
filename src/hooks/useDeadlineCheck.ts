@@ -46,7 +46,6 @@ export function useDeadlineCheck(
 
     async function checkDeadline() {
       try {
-        // Buscar o deadline do departamento
         const { data: department, error } = await supabase
           .from('departments')
           .select('availability_deadline_day')
@@ -76,15 +75,15 @@ export function useDeadlineCheck(
         const currentMonth = today.getMonth();
         const currentYear = today.getFullYear();
 
-        // Verificar se passou do deadline no mês corrente
+  
         const isPastDeadline = currentDay > deadlineDay;
 
-        // Calcular dias restantes até o próximo deadline
+
         let daysRemaining: number | null = null;
         if (!isPastDeadline) {
           daysRemaining = deadlineDay - currentDay;
         } else {
-          // Se passou, calcular até o próximo mês
+
           const nextMonth = new Date(currentYear, currentMonth + 1, deadlineDay);
           const diffTime = nextMonth.getTime() - today.getTime();
           daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

@@ -24,7 +24,7 @@ export async function getAvailableMembersByFunction(
   functionId: string,
   date: Date
 ): Promise<AvailableMember[]> {
-  const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD
+  const dateString = date.toISOString().split('T')[0];  
 
   const { data, error } = await supabase.rpc('get_available_members_by_function', {
     p_organization_id: organizationId,
