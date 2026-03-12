@@ -1,64 +1,26 @@
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Linking, Modal } from 'react-native';
-import { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
-import { LogIn, UserPlus, Mail, Lock, AlertTriangle, Calendar, Eye, EyeOff } from 'lucide-react-native';
+import { LogIn, UserPlus, Mail, Lock, Calendar, Eye, EyeOff } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
+import { useLogin } from '@/features/auth/useLogin';
+import { FeedbackModal } from '@/components/FeedbackModal';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false); // NOVO ESTADO AQUI
-
-  // Estados do Modal
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalMessage, setModalMessage] = useState({ title: '', message: '' });
-
-  const showErrorModal = (title: string, message: string) => {
-    setModalMessage({ title, message });
-    setModalVisible(true);
-  };
-
-  const handleSignIn = async () => {
-    if (!email.trim() || !password.trim()) {
-      showErrorModal('Atenção', 'Por favor, preencha todos os campos.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
-      });
-
-      if (error) {
-        if (error.message === 'Email not confirmed') {
-          showErrorModal(
-            'Email não verificado', 
-            'Por favor, clique no link de confirmação que enviamos para o seu email antes de entrar.'
-          );
-        } else if (error.message === 'Invalid login credentials') {
-          showErrorModal(
-            'Acesso Negado', 
-            'Email ou senha incorretos. Verifique seus dados e tente novamente.'
-          );
-        } else {
-          showErrorModal('Erro ao entrar', error.message);
-        }
-      } else {
-        router.replace('/(tabs)');
-      }
-    } catch (error: any) {
-      showErrorModal('Erro Inesperado', error.message || 'Ocorreu um erro inesperado.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    email,
+    setEmail,
+    password,
+    setPassword,
+    loading,
+    showPassword,
+    setShowPassword,
+    modalConfig,
+    closeModal,
+    handleSignIn
+  } = useLogin();
 
   const openPortfolio = () => {
     Linking.openURL('https://johnrodrigues.xyz');
@@ -82,9 +44,7 @@ export default function LoginScreen() {
           </Text>
         </View>
 
-        {/* Form */}
         <View>
-          {/* Email Input */}
           <View className="mb-4">
             <View className="flex-row items-center bg-blue-100 dark:bg-zinc-900 rounded-lg border border-blue-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
               <Mail size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
@@ -103,7 +63,6 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {/* Password Input COM OLHINHO */}
           <View className="mb-6">
             <View className="flex-row items-center bg-blue-100 dark:bg-zinc-900 rounded-lg border border-blue-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
               <Lock size={20} className="text-gray-500 dark:text-zinc-500 mr-3" />
@@ -114,7 +73,7 @@ export default function LoginScreen() {
                 placeholderTextColor={colorScheme === 'dark' ? '#52525b' : '#9ca3af'}
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry={!showPassword} // MUDANÇA AQUI
+                secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoComplete="password"
                 editable={!loading}
@@ -132,7 +91,6 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {/* Buttons */}
           <TouchableOpacity
             onPress={handleSignIn}
             disabled={loading}
@@ -167,7 +125,6 @@ export default function LoginScreen() {
         </View>
       </View>
 
-      {/* Footer */}
       <View className="pb-8 items-center justify-end px-6">
         <Text className="text-gray-400 dark:text-zinc-600 text-xs mb-1">
           Versão 1.0.0
@@ -179,32 +136,13 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Modal de Erro */}
-      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
-        <View className="flex-1 bg-black/60 justify-center items-center p-4">
-          <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
-            <View className="items-center mb-6">
-              <View className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 items-center justify-center mb-4">
-                <AlertTriangle size={32} color={colorScheme === 'dark' ? '#ef4444' : '#dc2626'} />
-              </View>
-              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 text-center mb-2">
-                {modalMessage.title}
-              </Text>
-              <Text className="text-gray-500 dark:text-zinc-400 text-center text-base px-2">
-                {modalMessage.message}
-              </Text>
-            </View>
-            <TouchableOpacity 
-              onPress={() => setModalVisible(false)}
-              className="bg-red-600 py-3 rounded-xl w-full"
-            >
-              <Text className="text-white font-bold text-center text-lg">
-                Tentar Novamente
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <FeedbackModal 
+        visible={modalConfig.visible}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={closeModal}
+      />
     </View>
   );
 }

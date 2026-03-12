@@ -1,9 +1,11 @@
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, Platform } from 'react-native';
-import { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { useState } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Users, Plus, User, Folder, Briefcase, Trash, Calendar, Shield, AlertTriangle, X } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { ArrowLeft, Users, Plus, Folder, Briefcase, Trash, Calendar, Shield } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { PromptModal } from '@/components/PromptModal';
+import { useDepartmentDetails } from '@/features/departments/useDepartmentDetails';
 
 export default function DepartmentDetailsScreen() {
   const router = useRouter();
@@ -11,27 +13,33 @@ export default function DepartmentDetailsScreen() {
   const { colorScheme } = useColorScheme();
   
   const iconColor = colorScheme === 'dark' ? '#e4e4e7' : '#374151';
-  const placeholderColor = colorScheme === 'dark' ? '#a1a1aa' : '#9ca3af';
 
-  const [department, setDepartment] = useState<any>(null);
-  const [parentDepartment, setParentDepartment] = useState<any>(null);
-  const [subDepartments, setSubDepartments] = useState<any[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
-  const [functions, setFunctions] = useState<any[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isMaster, setIsMaster] = useState(false);
-  const [isLeader, setIsLeader] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const {
+    department,
+    parentDepartment,
+    subDepartments,
+    members,
+    functions,
+    isAdmin,
+    isMaster,
+    isLeader,
+    loading,
+    handleBack,
+    removeMember,
+    deleteSubDepartment,
+    deleteFunction,
+    createFunction,
+    createSubDepartment
+  } = useDepartmentDetails(id);
   
-  // Modais de Criação
-  const [showModal, setShowModal] = useState(false);
+  const [showFunctionModal, setShowFunctionModal] = useState(false);
   const [newFunctionName, setNewFunctionName] = useState('');
   const [savingFunction, setSavingFunction] = useState(false);
-  const [showSubDepartmentModal, setShowSubDepartmentModal] = useState(false);
-  const [newSubDepartmentName, setNewSubDepartmentName] = useState('');
-  const [savingSubDepartment, setSavingSubDepartment] = useState(false);
+  
+  const [showSubDeptModal, setShowSubDeptModal] = useState(false);
+  const [newSubDeptName, setNewSubDeptName] = useState('');
+  const [savingSubDept, setSavingSubDept] = useState(false);
 
-  // Estados do Modal de Confirmação
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
     title: '',
@@ -40,18 +48,6 @@ export default function DepartmentDetailsScreen() {
     isDestructive: false,
     loading: false
   });
-
-  // --- LÓGICA DE VOLTAR INTELIGENTE ---
-  const handleBack = () => {
-    if (department?.parent_id) {
-      router.push({ 
-        pathname: '/(tabs)/departments/[id]', 
-        params: { id: department.parent_id } 
-      });
-    } else {
-      router.push('/(tabs)/departments');
-    }
-  };
 
   const requestConfirmation = (title: string, message: string, onConfirm: () => Promise<void>, isDestructive = false) => {
     setConfirmConfig({ title, message, onConfirm, isDestructive, loading: false });
@@ -64,126 +60,35 @@ export default function DepartmentDetailsScreen() {
       await confirmConfig.onConfirm();
       setConfirmModalVisible(false);
     } catch (error: any) {
-      console.error('Erro na confirmação:', error);
       Alert.alert('Erro', error.message || 'Falha na ação.');
     } finally {
       setConfirmConfig(prev => ({ ...prev, loading: false }));
     }
   };
 
-  const fetchFunctions = async (departmentId: string) => {
-    const { data } = await supabase.from('department_functions').select('id, name, description').eq('department_id', departmentId).order('name');
-    if (data) setFunctions(data);
-  };
-
-  const fetchSubDepartments = async (departmentId: string) => {
-    const { data } = await supabase.from('departments').select('id, name, description, parent_id').eq('parent_id', departmentId).order('name');
-    if (data) setSubDepartments(data);
-  };
-
-  const fetchParentDepartment = async (parentId: string) => {
-    const { data } = await supabase.from('departments').select('id, name').eq('id', parentId).single();
-    if (data) setParentDepartment(data);
-  };
-
-  const fetchMembers = async (departmentId: string) => {
-    const { data } = await supabase.from('department_members').select(`id, user_id, dept_role, profiles:user_id ( full_name, email, avatar_url ), department_functions:function_id ( name )`).eq('department_id', departmentId);
-    if (data) setMembers(data);
-  };
-
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      if (!id) { setLoading(false); return; }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
-      const { data: profile } = await supabase.from('profiles').select('org_role').eq('user_id', user.id).single();
-      if (profile) {
-        const masterStatus = profile.org_role === 'master';
-        setIsMaster(masterStatus);
-        setIsAdmin(profile.org_role === 'admin' || masterStatus);
-      }
-
-      const { data: leaderCheck } = await supabase.from('department_leaders').select('id').eq('department_id', id).eq('user_id', user.id).single();
-      if (leaderCheck) setIsLeader(true);
-
-      // Buscamos availability_deadline_day para usar na criação de subs
-      const { data: dept } = await supabase.from('departments').select('id, name, description, priority_order, availability_deadline_day, parent_id, organization_id').eq('id', id).single();
-
-      if (dept) {
-        setDepartment(dept);
-        if (dept.parent_id) await fetchParentDepartment(dept.parent_id);
-      }
-
-      await fetchMembers(String(id));
-      await fetchSubDepartments(String(id));
-      await fetchFunctions(String(id));
-      setLoading(false);
-    }
-    loadData();
-  }, [id]);
-
-  // Ações
-  const handleRemoveMember = (memberId: string, memberName: string) => {
-    requestConfirmation('Remover Membro', `ATENÇÃO: '${memberName}' possui escalas? Elas serão apagadas.`, async () => {
-      await supabase.from('rosters').delete().eq('member_id', memberId);
-      await supabase.from('department_members').delete().eq('id', memberId);
-      setMembers(prev => prev.filter(m => m.id !== memberId));
-    }, true);
-  };
-
-  const handleDeleteSubDepartment = (subDeptId: string, subDeptName: string) => {
-    requestConfirmation('Excluir Sub-departamento', `Excluir '${subDeptName}'?`, async () => {
-      const { error } = await supabase.from('departments').delete().eq('id', subDeptId);
-      if (error) throw error;
-      setSubDepartments(prev => prev.filter(s => s.id !== subDeptId));
-    }, true);
-  };
-
-  const handleDeleteFunction = (funcId: string, funcName: string) => {
-    requestConfirmation('Excluir Função', `Excluir '${funcName}'?`, async () => {
-      const { error } = await supabase.from('department_functions').delete().eq('id', funcId);
-      if (error) throw error;
-      setFunctions(prev => prev.filter(f => f.id !== funcId));
-    }, true);
-  };
-
   const handleCreateFunction = async () => {
-    if (!newFunctionName.trim() || !id) return Alert.alert('Erro', 'Nome inválido');
     setSavingFunction(true);
     try {
-      const { error } = await supabase.from('department_functions').insert({ department_id: id, name: newFunctionName.trim() });
-      if (error) throw error;
-      setShowModal(false);
+      await createFunction(newFunctionName);
+      setShowFunctionModal(false);
       setNewFunctionName('');
-      await fetchFunctions(String(id));
-    } catch (e: any) { Alert.alert('Erro', e.message); } finally { setSavingFunction(false); }
+    } catch (e: any) {
+      Alert.alert('Erro', e.message);
+    } finally {
+      setSavingFunction(false);
+    }
   };
 
   const handleCreateSubDepartment = async () => {
-    if (!newSubDepartmentName.trim() || !id) return Alert.alert('Erro', 'Nome inválido');
-    setSavingSubDepartment(true);
+    setSavingSubDept(true);
     try {
-      // CORREÇÃO AQUI: Incluído availability_deadline_day herdado do pai
-      const { error } = await supabase.from('departments').insert({
-        name: newSubDepartmentName.trim(),
-        parent_id: String(id),
-        organization_id: department.organization_id,
-        availability_deadline_day: department.availability_deadline_day || 20, // <--- FALTAVA ISSO
-        priority_order: 99
-      });
-      
-      if (error) throw error;
-      
-      setShowSubDepartmentModal(false);
-      setNewSubDepartmentName('');
-      await fetchSubDepartments(String(id));
-    } catch (e: any) { 
-      Alert.alert('Erro', e.message); 
-    } finally { 
-      setSavingSubDepartment(false); 
+      await createSubDepartment(newSubDeptName);
+      setShowSubDeptModal(false);
+      setNewSubDeptName('');
+    } catch (e: any) {
+      Alert.alert('Erro', e.message);
+    } finally {
+      setSavingSubDept(false);
     }
   };
 
@@ -232,7 +137,7 @@ export default function DepartmentDetailsScreen() {
                   <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">Sub-departamentos</Text>
                 </View>
                 {isAdmin && (
-                  <TouchableOpacity onPress={() => setShowSubDepartmentModal(true)} className="bg-indigo-600 rounded-lg px-3 py-1.5 flex-row items-center">
+                  <TouchableOpacity onPress={() => setShowSubDeptModal(true)} className="bg-indigo-600 rounded-lg px-3 py-1.5 flex-row items-center">
                     <Plus size={16} color="white" style={{ marginRight: 4 }} />
                     <Text className="text-white font-semibold text-xs">Criar</Text>
                   </TouchableOpacity>
@@ -252,7 +157,7 @@ export default function DepartmentDetailsScreen() {
                         </View>
                       </TouchableOpacity>
                       {isMaster && (
-                        <TouchableOpacity onPress={() => handleDeleteSubDepartment(String(child.id), String(child.name))} className="p-2 ml-2">
+                        <TouchableOpacity onPress={() => requestConfirmation('Excluir', `Excluir '${child.name}'?`, () => deleteSubDepartment(String(child.id)), true)} className="p-2 ml-2">
                           <Trash size={18} color="#ef4444" />
                         </TouchableOpacity>
                       )}
@@ -263,7 +168,7 @@ export default function DepartmentDetailsScreen() {
                 <View className="bg-white dark:bg-zinc-900 rounded-xl p-6 items-center border border-gray-200 dark:border-zinc-800">
                   <Folder size={32} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
                   <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhum sub-departamento</Text>
-                  {isAdmin && <TouchableOpacity onPress={() => setShowSubDepartmentModal(true)} className="mt-4 bg-indigo-600 rounded-lg px-4 py-2"><Text className="text-white font-semibold text-sm">Criar</Text></TouchableOpacity>}
+                  {isAdmin && <TouchableOpacity onPress={() => setShowSubDeptModal(true)} className="mt-4 bg-indigo-600 rounded-lg px-4 py-2"><Text className="text-white font-semibold text-sm">Criar</Text></TouchableOpacity>}
                 </View>
               )}
             </View>
@@ -295,7 +200,7 @@ export default function DepartmentDetailsScreen() {
                         </View>
                       </View>
                       {(isMaster || isAdmin) && (
-                        <TouchableOpacity onPress={() => handleRemoveMember(String(member.id), member.profiles?.full_name || 'Membro')} className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                        <TouchableOpacity onPress={() => requestConfirmation('Remover', `Remover '${member.profiles?.full_name}'?`, () => removeMember(String(member.id)), true)} className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
                           <Trash size={18} color="#ef4444" />
                         </TouchableOpacity>
                       )}
@@ -323,7 +228,7 @@ export default function DepartmentDetailsScreen() {
                 <Text className="text-lg font-semibold text-gray-900 dark:text-zinc-100">Funções</Text>
               </View>
               {isAdmin && (
-                <TouchableOpacity onPress={() => setShowModal(true)} className="bg-blue-600 rounded-lg px-3 py-1.5 flex-row items-center">
+                <TouchableOpacity onPress={() => setShowFunctionModal(true)} className="bg-blue-600 rounded-lg px-3 py-1.5 flex-row items-center">
                   <Plus size={16} color="white" style={{ marginRight: 4 }} />
                   <Text className="text-white font-semibold text-xs">Nova</Text>
                 </TouchableOpacity>
@@ -339,7 +244,7 @@ export default function DepartmentDetailsScreen() {
                         {func.description && <Text className="text-gray-500 dark:text-zinc-400 text-sm mt-1">{func.description}</Text>}
                       </View>
                       {isAdmin && (
-                        <TouchableOpacity onPress={() => handleDeleteFunction(String(func.id), String(func.name))} className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                        <TouchableOpacity onPress={() => requestConfirmation('Excluir', `Excluir '${func.name}'?`, () => deleteFunction(String(func.id)), true)} className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
                           <Trash size={18} color="#ef4444" />
                         </TouchableOpacity>
                       )}
@@ -351,99 +256,47 @@ export default function DepartmentDetailsScreen() {
               <View className="bg-white dark:bg-zinc-900 rounded-xl p-6 items-center border border-gray-200 dark:border-zinc-800">
                 <Briefcase size={32} color={colorScheme === 'dark' ? '#52525b' : '#9ca3af'} />
                 <Text className="text-gray-500 dark:text-zinc-400 mt-2">Nenhuma função</Text>
-                {isAdmin && <TouchableOpacity onPress={() => setShowModal(true)} className="mt-4 bg-blue-600 rounded-lg px-4 py-2"><Text className="text-white font-semibold text-sm">Criar</Text></TouchableOpacity>}
+                {isAdmin && <TouchableOpacity onPress={() => setShowFunctionModal(true)} className="mt-4 bg-blue-600 rounded-lg px-4 py-2"><Text className="text-white font-semibold text-sm">Criar</Text></TouchableOpacity>}
               </View>
             )}
           </View>
         </View>
       </ScrollView>
 
-      {/* --- MODAIS CENTRADOS (Correção para Web e Zoom) --- */}
+      <ConfirmModal 
+        visible={confirmModalVisible} 
+        title={confirmConfig.title} 
+        message={confirmConfig.message} 
+        isDestructive={confirmConfig.isDestructive} 
+        loading={confirmConfig.loading} 
+        onConfirm={handleConfirmAction} 
+        onCancel={() => setConfirmModalVisible(false)} 
+      />
 
-      {/* Modal de Confirmação */}
-      <Modal visible={confirmModalVisible} transparent animationType="fade" onRequestClose={() => setConfirmModalVisible(false)}>
-        <View className="flex-1 bg-black/60 justify-center items-center p-4">
-            <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
-                <View className="items-center mb-4">
-                    <View className={`w-12 h-12 rounded-full items-center justify-center mb-3 ${confirmConfig.isDestructive ? 'bg-red-100 dark:bg-red-900/30' : 'bg-blue-100 dark:bg-blue-900/30'}`}>
-                        {confirmConfig.isDestructive ? (
-                            <AlertTriangle size={24} color={colorScheme === 'dark' ? '#ef4444' : '#dc2626'} />
-                        ) : (
-                            <Shield size={24} color={colorScheme === 'dark' ? '#3b82f6' : '#2563eb'} />
-                        )}
-                    </View>
-                    <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100 text-center mb-2">{confirmConfig.title}</Text>
-                    <Text className="text-gray-500 dark:text-zinc-400 text-center text-base">{confirmConfig.message}</Text>
-                </View>
-                <View className="flex-row gap-3">
-                    <TouchableOpacity onPress={() => setConfirmModalVisible(false)} className="flex-1 bg-gray-100 dark:bg-zinc-800 py-3 rounded-xl" disabled={confirmConfig.loading}>
-                        <Text className="text-gray-700 dark:text-zinc-300 font-semibold text-center">Cancelar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={handleConfirmAction} className={`flex-1 py-3 rounded-xl flex-row justify-center items-center ${confirmConfig.isDestructive ? 'bg-red-600' : 'bg-blue-600'}`} disabled={confirmConfig.loading}>
-                        {confirmConfig.loading ? <ActivityIndicator size="small" color="white" /> : <Text className="text-white font-semibold text-center">{confirmConfig.isDestructive ? 'Excluir' : 'Confirmar'}</Text>}
-                    </TouchableOpacity>
-                </View>
-            </View>
-        </View>
-      </Modal>
+      <PromptModal 
+        visible={showSubDeptModal} 
+        title="Novo Sub-departamento" 
+        label="Nome" 
+        placeholder="Ex: Infantil, Louvor..." 
+        value={newSubDeptName} 
+        onChangeText={setNewSubDeptName} 
+        loading={savingSubDept} 
+        onConfirm={handleCreateSubDepartment} 
+        onCancel={() => { setShowSubDeptModal(false); setNewSubDeptName(''); }} 
+        confirmButtonColor="bg-indigo-600" 
+      />
 
-      {/* Modal Criar Sub-departamento (CENTRALIZADO) */}
-      <Modal visible={showSubDepartmentModal} transparent animationType="fade" onRequestClose={() => setShowSubDepartmentModal(false)}>
-        <View className="flex-1 bg-black/60 justify-center items-center p-4">
-          <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Novo Sub-departamento</Text>
-              <TouchableOpacity onPress={() => setShowSubDepartmentModal(false)}>
-                <X size={24} color={placeholderColor} />
-              </TouchableOpacity>
-            </View>
-            
-            <View className="mb-6">
-              <Text className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Nome</Text>
-              <TextInput 
-                className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 text-base" 
-                placeholder="Ex: Infantil, Louvor..." 
-                placeholderTextColor={placeholderColor} 
-                value={newSubDepartmentName} 
-                onChangeText={setNewSubDepartmentName} 
-              />
-            </View>
-
-            <TouchableOpacity onPress={handleCreateSubDepartment} className="bg-indigo-600 rounded-xl py-3 w-full items-center">
-              <Text className="text-white font-bold text-base">Criar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal Criar Função (CENTRALIZADO) */}
-      <Modal visible={showModal} transparent animationType="fade" onRequestClose={() => setShowModal(false)}>
-        <View className="flex-1 bg-black/60 justify-center items-center p-4">
-          <View className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-gray-900 dark:text-zinc-100">Nova Função</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
-                <X size={24} color={placeholderColor} />
-              </TouchableOpacity>
-            </View>
-            
-            <View className="mb-6">
-              <Text className="text-sm font-medium text-gray-700 dark:text-zinc-300 mb-2">Nome da Função</Text>
-              <TextInput 
-                className="bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-700 px-4 py-3 text-gray-900 dark:text-zinc-100 text-base" 
-                placeholder="Ex: Guitarrista, Professor..." 
-                placeholderTextColor={placeholderColor} 
-                value={newFunctionName} 
-                onChangeText={setNewFunctionName} 
-              />
-            </View>
-
-            <TouchableOpacity onPress={handleCreateFunction} className="bg-blue-600 rounded-xl py-3 w-full items-center">
-              <Text className="text-white font-bold text-base">Criar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <PromptModal 
+        visible={showFunctionModal} 
+        title="Nova Função" 
+        label="Nome da Função" 
+        placeholder="Ex: Guitarrista, Professor..." 
+        value={newFunctionName} 
+        onChangeText={setNewFunctionName} 
+        loading={savingFunction} 
+        onConfirm={handleCreateFunction} 
+        onCancel={() => { setShowFunctionModal(false); setNewFunctionName(''); }} 
+      />
     </>
   );
 }

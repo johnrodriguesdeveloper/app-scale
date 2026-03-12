@@ -1,253 +1,173 @@
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
-import { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { X, Plus, Trash2, Users } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { X, Plus, Trash2, Settings, Users } from 'lucide-react-native';
+import { useColorScheme } from 'nativewind';
+import { useDepartmentSettings } from '@/features/departments/useDepartmentSettings';
+import { ConfirmModal } from '@/components/ConfirmModal';
 
 export default function DepartmentSettingsScreen() {
   const router = useRouter();
   const { departmentId } = useLocalSearchParams<{ departmentId: string }>();
-  const [functions, setFunctions] = useState<any[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
-  const [newFunctionName, setNewFunctionName] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { colorScheme } = useColorScheme();
+  
+  const iconColor = colorScheme === 'dark' ? '#e4e4e7' : '#374151';
+  const placeholderColor = colorScheme === 'dark' ? '#a1a1aa' : '#9ca3af';
 
-  // Carregar funções do departamento
-  useEffect(() => {
-    if (!departmentId) return;
-
-    async function loadFunctions() {
-      const { data } = await supabase
-        .from('department_functions')
-        .select('id, name')
-        .eq('department_id', departmentId)
-        .order('name');
-
-      if (data) {
-        setFunctions(data);
-      }
-    }
-
-    loadFunctions();
-  }, [departmentId]);
-
-  // Carregar membros do departamento
-  useEffect(() => {
-    if (!departmentId) return;
-
-    async function loadMembers() {
-      const { data } = await supabase
-        .from('department_members')
-        .select(`
-          user_id,
-          profiles(id, full_name, email),
-          member_functions(function_id, department_functions(id, name))
-        `)
-        .eq('department_id', departmentId);
-
-      if (data) {
-        setMembers(data);
-      }
-    }
-
-    loadMembers();
-  }, [departmentId]);
-
-  const addFunction = async () => {
-    if (!newFunctionName.trim() || !departmentId) return;
-
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('department_functions')
-        .insert({
-          department_id: departmentId,
-          name: newFunctionName.trim(),
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setFunctions([...functions, data]);
-      setNewFunctionName('');
-    } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Erro ao adicionar função');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteFunction = async (functionId: string) => {
-    Alert.alert(
-      'Confirmar',
-      'Tem certeza que deseja remover esta função?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Remover',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('department_functions')
-              .delete()
-              .eq('id', functionId);
-
-            if (error) {
-              Alert.alert('Erro', error.message);
-            } else {
-              setFunctions(functions.filter((f) => f.id !== functionId));
-            }
-          },
-        },
-      ]
-    );
-  };
+  const {
+    functions,
+    members,
+    newFunctionName,
+    setNewFunctionName,
+    loading,
+    confirmModalVisible,
+    setConfirmModalVisible,
+    confirmConfig,
+    addFunction,
+    requestDeleteFunction,
+    executeDeleteFunction,
+    toggleMemberFunction
+  } = useDepartmentSettings(departmentId);
 
   return (
-    <View className="flex-1 bg-gray-50">
-      <View className="bg-white border-b border-gray-200 p-4">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-2xl font-bold text-gray-900">Configurações</Text>
-          <TouchableOpacity onPress={() => router.back()}>
-            <X size={24} color="#374151" />
-          </TouchableOpacity>
+    <View className="flex-1 bg-gray-50 dark:bg-zinc-950">
+      
+      <View className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 pt-12 pb-4 flex-row items-center justify-between">
+        <View className="flex-row items-center">
+          <Settings size={24} color="#3b82f6" className="mr-3" />
+          <Text className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Configurações</Text>
         </View>
+        <TouchableOpacity onPress={() => router.back()} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
+          <X size={20} color={iconColor} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView className="flex-1 p-4">
-        {/* CRUD de Funções */}
-        <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-200">
-          <Text className="text-lg font-semibold text-gray-900 mb-4">Funções</Text>
+        
+        <View className="bg-white dark:bg-zinc-900 rounded-2xl p-5 mb-6 shadow-sm border border-gray-200 dark:border-zinc-800">
+          <Text className="text-lg font-bold text-gray-900 dark:text-zinc-100 mb-4">Gerenciar Funções</Text>
 
-          {/* Adicionar Nova Função */}
-          <View className="flex-row mb-4">
+          <View className="flex-row items-center mb-6">
             <TextInput
               value={newFunctionName}
               onChangeText={setNewFunctionName}
-              placeholder="Nome da função (ex: Baixo, Violino)"
-              className="flex-1 bg-gray-100 rounded-lg px-4 py-2 mr-2"
+              placeholder="Ex: Baixo, Violino..."
+              placeholderTextColor={placeholderColor}
+              className="flex-1 bg-gray-100 dark:bg-zinc-800 rounded-xl px-4 py-3 mr-3 text-gray-900 dark:text-zinc-100"
             />
             <TouchableOpacity
               onPress={addFunction}
               disabled={loading || !newFunctionName.trim()}
-              className="bg-blue-500 rounded-lg px-4 py-2 justify-center"
+              className={`bg-blue-600 rounded-xl p-3 items-center justify-center ${(!newFunctionName.trim() || loading) ? 'opacity-50' : ''}`}
             >
-              <Plus size={20} color="white" />
+              {loading ? <ActivityIndicator size="small" color="white" /> : <Plus size={24} color="white" />}
             </TouchableOpacity>
           </View>
 
-          {/* Lista de Funções */}
-          {functions.map((func) => (
-            <View
-              key={func.id}
-              className="flex-row items-center justify-between py-3 border-b border-gray-100 last:border-b-0"
-            >
-              <Text className="text-gray-900 font-medium flex-1">{func.name}</Text>
-              <TouchableOpacity
-                onPress={() => deleteFunction(func.id)}
-                className="ml-2"
+          {functions.length > 0 ? (
+            functions.map((func, index) => (
+              <View
+                key={func.id}
+                className={`flex-row items-center justify-between py-3 ${index !== functions.length - 1 ? 'border-b border-gray-100 dark:border-zinc-800' : ''}`}
               >
-                <Trash2 size={20} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-          ))}
+                <Text className="text-gray-800 dark:text-zinc-200 font-semibold text-base flex-1">{func.name}</Text>
+                <TouchableOpacity
+                  onPress={() => requestDeleteFunction(func.id, func.name)}
+                  className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg ml-3"
+                >
+                  <Trash2 size={18} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+            ))
+          ) : (
+            <Text className="text-gray-500 dark:text-zinc-400 text-center py-4 italic">
+              Nenhuma função cadastrada.
+            </Text>
+          )}
         </View>
 
-        {/* Atribuir Funções aos Membros */}
-        <View className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-          <Text className="text-lg font-semibold text-gray-900 mb-4">
-            Atribuir Funções aos Membros
+        <View className="bg-white dark:bg-zinc-900 rounded-2xl p-5 shadow-sm border border-gray-200 dark:border-zinc-800 mb-10">
+          <View className="flex-row items-center mb-4">
+            <Users size={20} color="#3b82f6" className="mr-2" />
+            <Text className="text-lg font-bold text-gray-900 dark:text-zinc-100">
+              Atribuir Funções
+            </Text>
+          </View>
+          <Text className="text-sm text-gray-500 dark:text-zinc-400 mb-6">
+            Selecione o que cada membro está habilitado a fazer na escala.
           </Text>
 
-          {members.map((member: any) => (
-            <View
-              key={member.user_id}
-              className="py-3 border-b border-gray-100 last:border-b-0"
-            >
-              <Text className="text-gray-900 font-medium mb-2">
-                {member.profiles?.full_name || 'Sem nome'}
-              </Text>
-              <Text className="text-gray-600 text-sm mb-2">
-                {member.profiles?.email}
-              </Text>
-              <View className="flex-row flex-wrap">
-                {functions.map((func) => {
-                  const hasFunction = member.member_functions?.some(
-                    (mf: any) => mf.function_id === func.id
-                  );
-                  return (
-                    <TouchableOpacity
-                      key={func.id}
-                      onPress={async () => {
-                        if (hasFunction) {
-                          // Remover função
-                          const { error } = await supabase
-                            .from('member_functions')
-                            .delete()
-                            .eq('user_id', member.user_id)
-                            .eq('function_id', func.id);
-
-                          if (!error) {
-                            // Recarregar membros
-                            const { data } = await supabase
-                              .from('department_members')
-                              .select(`
-                                user_id,
-                                profiles(id, full_name, email),
-                                member_functions(function_id, department_functions(id, name))
-                              `)
-                              .eq('department_id', departmentId);
-
-                            if (data) setMembers(data);
-                          }
-                        } else {
-                          // Adicionar função
-                          const { error } = await supabase
-                            .from('member_functions')
-                            .insert({
-                              user_id: member.user_id,
-                              function_id: func.id,
-                            });
-
-                          if (!error) {
-                            // Recarregar membros
-                            const { data } = await supabase
-                              .from('department_members')
-                              .select(`
-                                user_id,
-                                profiles(id, full_name, email),
-                                member_functions(function_id, department_functions(id, name))
-                              `)
-                              .eq('department_id', departmentId);
-
-                            if (data) setMembers(data);
-                          }
-                        }
-                      }}
-                      className={`px-3 py-1 rounded-full mr-2 mb-2 ${
-                        hasFunction
-                          ? 'bg-blue-500'
-                          : 'bg-gray-200'
-                      }`}
-                    >
-                      <Text
-                        className={
-                          hasFunction
-                            ? 'text-white text-xs font-semibold'
-                            : 'text-gray-700 text-xs'
-                        }
-                      >
-                        {func.name}
+          {members.length > 0 ? (
+            members.map((member, index) => (
+              <View
+                key={member.user_id}
+                className={`py-4 ${index !== members.length - 1 ? 'border-b border-gray-100 dark:border-zinc-800' : ''}`}
+              >
+                <View className="flex-row items-center mb-3">
+                  <View className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full items-center justify-center mr-3">
+                    <Text className="text-blue-600 dark:text-blue-400 font-bold text-lg">
+                      {member.profiles.full_name.charAt(0)}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text className="text-gray-900 dark:text-zinc-100 font-bold text-base">
+                      {member.profiles.full_name}
+                    </Text>
+                    {member.profiles.email && (
+                      <Text className="text-gray-500 dark:text-zinc-400 text-xs">
+                        {member.profiles.email}
                       </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                    )}
+                  </View>
+                </View>
+                
+                <View className="flex-row flex-wrap gap-2 pl-13">
+                  {functions.map((func) => {
+                    const hasFunction = member.member_functions.some(
+                      (mf) => mf.function_id === func.id
+                    );
+                    return (
+                      <TouchableOpacity
+                        key={func.id}
+                        onPress={() => toggleMemberFunction(member.user_id, func.id, hasFunction)}
+                        className={`px-4 py-2 rounded-xl border ${
+                          hasFunction
+                            ? 'bg-blue-600 border-blue-600'
+                            : 'bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700'
+                        }`}
+                      >
+                        <Text
+                          className={`font-semibold text-xs ${
+                            hasFunction
+                              ? 'text-white'
+                              : 'text-gray-600 dark:text-zinc-400'
+                          }`}
+                        >
+                          {func.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
-            </View>
-          ))}
+            ))
+          ) : (
+            <Text className="text-gray-500 dark:text-zinc-400 text-center py-6 italic">
+              Nenhum membro no departamento.
+            </Text>
+          )}
         </View>
       </ScrollView>
+
+      <ConfirmModal 
+        visible={confirmModalVisible}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        isDestructive={true}
+        loading={confirmConfig.loading}
+        onConfirm={executeDeleteFunction}
+        onCancel={() => setConfirmModalVisible(false)}
+      />
+
     </View>
   );
 }
