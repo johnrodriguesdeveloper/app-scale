@@ -12,7 +12,7 @@ export function useSettings() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    router.replace('/(auth)/login');
+    router.replace('/login');
   };
 
   const openPortfolio = () => {

@@ -1,4 +1,4 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useColorScheme } from 'nativewind'; 
@@ -8,37 +8,27 @@ import '../global.css';
 export default function RootLayout() {
   const { colorScheme, setColorScheme } = useColorScheme(); 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const segments = useSegments();
+  const pathname = usePathname();
   const router = useRouter();
 
-  
   useEffect(() => {
     const loadTheme = async () => {
       try {
         const savedTheme = await AsyncStorage.getItem('user-theme');
-        
         if (savedTheme === 'dark' || savedTheme === 'light') {
-         
           setColorScheme(savedTheme);
         } else {
-
           setColorScheme('dark'); 
         }
-      } catch (error) {
-        console.log('Erro ao carregar tema:', error);
-      }
+      } catch (error) {}
     };
-
     loadTheme();
   }, []);
- 
 
   useEffect(() => {
-
     supabase.auth.getSession().then(({ data: { session } }) => {
       setIsAuthenticated(!!session);
     });
-
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(!!session);
@@ -50,20 +40,19 @@ export default function RootLayout() {
   useEffect(() => {
     if (isAuthenticated === null) return; 
 
-
-    const inLoginScreen = segments[0] === 'login';
-    const inSignUpScreen = segments[0] === 'signup';
+    const isAuthRoute = pathname.includes('/login') || pathname.includes('/signup') || pathname.includes('/forgot-password');
+    const isUpdatePassword = pathname.includes('/update-password');
 
     if (!isAuthenticated) {
-      if (!inLoginScreen && !inSignUpScreen) {
+      if (!isAuthRoute && !isUpdatePassword) {
         router.replace('/login');
       }
     } else {
-      if (inLoginScreen || inSignUpScreen) {
+      if (isAuthRoute) {
         router.replace('/(tabs)');
       }
     }
-  }, [isAuthenticated, segments]);
+  }, [isAuthenticated, pathname]);
 
   return (
     <Stack
@@ -74,6 +63,8 @@ export default function RootLayout() {
     >
       <Stack.Screen name="login" />
       <Stack.Screen name="signup" />
+      <Stack.Screen name="forgot-password" />
+      <Stack.Screen name="update-password" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="availability" />
       <Stack.Screen name="create-roster" />
