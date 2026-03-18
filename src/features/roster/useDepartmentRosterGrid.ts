@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Alert, Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, getDay } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { GridColumn } from '@/types';
 
 export function useDepartmentRosterGrid(departmentId: string | string[] | undefined) {
@@ -16,7 +15,8 @@ export function useDepartmentRosterGrid(departmentId: string | string[] | undefi
   const [gridColumns, setGridColumns] = useState<GridColumn[]>([]);
   const [rosterEntries, setRosterEntries] = useState<any[]>([]);
 
-  const [unavailableUsers, setUnavailableUsers] = useState<any[]>([]);
+  const [availabilityExceptions, setAvailabilityExceptions] = useState<any[]>([]);
+  const [regularAvailabilities, setRegularAvailabilities] = useState<any[]>([]);
   const [busyUsers, setBusyUsers] = useState<any[]>([]);
 
   const [showMemberSelect, setShowMemberSelect] = useState(false);
@@ -99,12 +99,17 @@ export function useDepartmentRosterGrid(departmentId: string | string[] | undefi
 
       const { data: exceptions } = await supabase
         .from('availability_exceptions')
-        .select('user_id, service_day_id, specific_date')
-        .eq('is_available', false)
+        .select('user_id, service_day_id, specific_date, is_available')
         .gte('specific_date', startStr)
         .lte('specific_date', endStr);
 
-      if (exceptions) setUnavailableUsers(exceptions);
+      if (exceptions) setAvailabilityExceptions(exceptions);
+
+      const { data: availabilities } = await supabase
+        .from('availability_routine')
+        .select('user_id, service_day_id, is_available');
+
+      if (availabilities) setRegularAvailabilities(availabilities);
 
       const { data: conflicts } = await supabase
         .from('rosters')
@@ -154,15 +159,28 @@ export function useDepartmentRosterGrid(departmentId: string | string[] | undefi
         (mf: any) => mf.function_id === selectedCell.functionId
       );
 
-      const isUnavailable = unavailableUsers.some(
-        u => u.user_id === member.user_id &&
-        u.specific_date === dateStr &&
-        (u.service_day_id === selectedCell.serviceId || u.service_day_id === null)
-      );
+      const isUnavailable = (() => {
+        const exception = availabilityExceptions.find(e => 
+          e.user_id === member.user_id &&
+          e.specific_date?.startsWith(dateStr) &&
+          (!e.service_day_id || e.service_day_id === selectedCell.serviceId)
+        );
+
+        if (exception) return !exception.is_available;
+
+        const regular = regularAvailabilities.find(a => 
+          a.user_id === member.user_id &&
+          a.service_day_id === selectedCell.serviceId
+        );
+
+        if (regular) return !regular.is_available;
+
+        return false;
+      })();
 
       const isBusy = busyUsers.some(
         b => b.user_id === member.user_id &&
-        b.schedule_date === dateStr &&
+        b.schedule_date?.startsWith(dateStr) &&
         b.service_day_id === selectedCell.serviceId
       );
 
