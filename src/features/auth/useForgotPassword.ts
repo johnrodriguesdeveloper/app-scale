@@ -34,8 +34,13 @@ export function useForgotPassword() {
 
     setLoading(true);
     try {
+      const isDev = process.env.NODE_ENV === 'development';
+      const redirectUrl = isDev 
+        ? 'http://localhost:8081/update-password' 
+        : 'https://scale-verb.xyz/update-password';
+
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: 'http://localhost:8081/update-password',
+        redirectTo: redirectUrl,
       });
 
       if (error) throw error;
