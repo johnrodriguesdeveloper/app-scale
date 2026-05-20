@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { FeedbackModalProps } from '@/types';
+import { usePushNotification } from '@/features/notification/usePushNotification';
 
 export function useLogin() {
   const router = useRouter();
+  const { registerPush } = usePushNotification(); 
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,7 +36,7 @@ export function useLogin() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password,
       });
@@ -54,6 +56,11 @@ export function useLogin() {
           showErrorModal('Erro ao entrar', error.message);
         }
       } else {
+        
+        if (data?.user) {
+          registerPush(data.user.id).catch(console.error);
+        }
+        
         router.replace('/(tabs)');
       }
     } catch (error: any) {
