@@ -91,12 +91,20 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
           </View>
-          <View className="items-end mb-6 -mt-2">
+          <View className="flex-row items-center justify-between mb-6 -mt-4">
+            
+
+            <View>
+              <PWAInstallButton />
+            </View>
+
+            
             <TouchableOpacity onPress={() => router.push('/forgot-password')}>
               <Text className="text-blue-600 dark:text-blue-400 font-medium">
                 Esqueci minha senha
               </Text>
             </TouchableOpacity>
+
           </View>
 
           <TouchableOpacity
@@ -130,9 +138,6 @@ export default function LoginScreen() {
               </Text>
             </View>
           </TouchableOpacity>
-
-          <PWAInstallButton />
-
         </View>
       </View>
 
