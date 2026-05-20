@@ -4,6 +4,7 @@ import { LogIn, UserPlus, Mail, Lock, Calendar, Eye, EyeOff } from 'lucide-react
 import { useColorScheme } from 'nativewind';
 import { useLogin } from '@/features/auth/useLogin';
 import { FeedbackModal } from '@/components/FeedbackModal';
+import { PWAInstallButton } from '@/components/PWAInstallButton';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -35,8 +36,8 @@ export default function LoginScreen() {
             <Calendar size={32} color="white" />
           </View>
           
-          <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-100 mb-2">
-            Escala Verbo <br />Zona Norte
+          <Text className="text-3xl font-bold text-gray-900 dark:text-zinc-100 mb-2 text-center">
+            Escala Verbo {"\n"}Zona Norte
           </Text> 
         
           <Text className="text-gray-600 dark:text-zinc-400 text-center">
@@ -119,7 +120,7 @@ export default function LoginScreen() {
           <TouchableOpacity
             onPress={() => router.push('/signup')}
             disabled={loading}
-            className="bg-white dark:bg-zinc-900 border-2 border-blue-600 dark:border-blue-500 rounded-lg py-4 px-6 shadow-sm mb-4 active:bg-gray-50 dark:active:bg-zinc-800"
+            className="bg-white dark:bg-zinc-900 border-2 border-blue-600 dark:border-blue-500 rounded-lg py-4 px-6 shadow-sm mb-2 active:bg-gray-50 dark:active:bg-zinc-800"
             style={{ opacity: loading ? 0.5 : 1 }}
           >
             <View className="flex-row items-center justify-center">
@@ -129,6 +130,9 @@ export default function LoginScreen() {
               </Text>
             </View>
           </TouchableOpacity>
+
+          <PWAInstallButton />
+
         </View>
       </View>
 

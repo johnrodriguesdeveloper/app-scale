@@ -27,7 +27,13 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "lang": "pt-BR"
+      "lang": "pt-BR",
+      "shortName": "Scale Verb",
+      "themeColor": "#3b82f6",
+      "backgroundColor": "#ffffff",
+      "display": "standalone",
+      "bundler": "metro",
+      "output": "single"
     },
     "plugins": [
       "expo-router",
