@@ -1,176 +1,173 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import type { DepartmentFunction, DepartmentMember, Profile } from "@/types/department"
 
-export function useMemberList(departmentId: string | undefined) {
-  const supabase = createClient()
+interface MemberListData {
+  members: DepartmentMember[]
+  departmentLeaders: string[]
+  availableFunctions: DepartmentFunction[]
+  canEdit: boolean
+}
 
-  const [members, setMembers] = useState<DepartmentMember[]>([])
-  const [departmentLeaders, setDepartmentLeaders] = useState<string[]>([])
-  const [availableProfiles, setAvailableProfiles] = useState<Profile[]>([])
-  const [availableFunctions, setAvailableFunctions] = useState<DepartmentFunction[]>([])
-  const [loading, setLoading] = useState(true)
-  const [canEdit, setCanEdit] = useState(false)
+async function fetchMemberListData(
+  supabase: ReturnType<typeof createClient>,
+  departmentId: string
+): Promise<MemberListData> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  useEffect(() => {
-    if (departmentId) {
-      loadInitialData()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [departmentId])
-
-  const loadInitialData = async () => {
-    setLoading(true)
-    await Promise.all([checkPermissions(), loadMembers(), loadAvailableFunctions()])
-    setLoading(false)
-  }
-
-  const checkPermissions = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("org_role")
-      .eq("user_id", user.id)
-      .single()
-
-    const isGlobalAdmin = profile?.org_role === "admin" || profile?.org_role === "master"
-
-    const { data: leaderRecord } = await supabase
-      .from("department_leaders")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("department_id", departmentId!)
-      .maybeSingle()
-
-    setCanEdit(isGlobalAdmin || !!leaderRecord)
-  }
-
-  const loadMembers = async () => {
-    const { data: leadersData } = await supabase
-      .from("department_leaders")
-      .select("user_id")
-      .eq("department_id", departmentId!)
-
-    const leaderIds = leadersData?.map((l) => l.user_id) || []
-    setDepartmentLeaders(leaderIds)
-
-    const { data, error } = await supabase
+  const [profileRes, leaderRecordRes, leadersRes, membersRes, functionsRes] = await Promise.all([
+    user
+      ? supabase.from("profiles").select("org_role").eq("user_id", user.id).single()
+      : Promise.resolve({ data: null }),
+    user
+      ? supabase
+          .from("department_leaders")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("department_id", departmentId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase.from("department_leaders").select("user_id").eq("department_id", departmentId),
+    supabase
       .from("department_members")
       .select(
         "id, user_id, dept_role, profiles(full_name, avatar_url, email), member_functions(department_functions(id, name))"
       )
-      .eq("department_id", departmentId!)
+      .eq("department_id", departmentId),
+    supabase.from("department_functions").select("id, name").eq("department_id", departmentId).order("name"),
+  ])
 
-    if (error) throw error
+  const isGlobalAdmin = profileRes.data?.org_role === "admin" || profileRes.data?.org_role === "master"
+  const leaderIds = leadersRes.data?.map((l) => l.user_id) || []
 
-    if (data) {
-      const sorted = (data as unknown as DepartmentMember[]).sort((a, b) => {
-        const aIsLeader = leaderIds.includes(a.user_id)
-        const bIsLeader = leaderIds.includes(b.user_id)
-        if (aIsLeader && !bIsLeader) return -1
-        if (!aIsLeader && bIsLeader) return 1
-        return (a.profiles?.full_name || "").localeCompare(b.profiles?.full_name || "")
-      })
-      setMembers(sorted)
-    }
-  }
-
-  const loadAvailableProfiles = async () => {
-    const { data: allProfiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .order("full_name")
-    const { data: existing } = await supabase
-      .from("department_members")
-      .select("user_id")
-      .eq("department_id", departmentId!)
-    const existingIds = existing?.map((m) => m.user_id) || []
-    setAvailableProfiles((allProfiles || []).filter((p) => !existingIds.includes(p.id)) as Profile[])
-  }
-
-  const loadAvailableFunctions = async () => {
-    const { data } = await supabase
-      .from("department_functions")
-      .select("id, name")
-      .eq("department_id", departmentId!)
-      .order("name")
-    if (data) setAvailableFunctions(data)
-  }
-
-  const addMember = async (userId: string, functionIds: string[]) => {
-    const { data: newMember, error: memError } = await supabase
-      .from("department_members")
-      .insert({ department_id: departmentId!, user_id: userId, dept_role: "member" })
-      .select()
-      .single()
-
-    if (memError) throw new Error(memError.message)
-
-    if (functionIds.length > 0) {
-      const functionsToInsert = functionIds.map((funcId) => ({
-        member_id: newMember.id as string,
-        function_id: funcId,
-      }))
-
-      const { error: funcError } = await supabase.from("member_functions").insert(functionsToInsert)
-
-      if (funcError) throw new Error(funcError.message)
-    }
-
-    await loadMembers()
-  }
-
-  const addFunctionsToMember = async (memberId: string, functionIds: string[]) => {
-    if (functionIds.length === 0) return
-
-    const functionsToInsert = functionIds.map((funcId) => ({
-      member_id: memberId,
-      function_id: funcId,
-    }))
-
-    const { error } = await supabase.from("member_functions").insert(functionsToInsert)
-
-    if (error) {
-      if (error.code === "23505") throw new Error("O membro já possui uma das funções selecionadas.")
-      throw new Error(error.message)
-    }
-
-    await loadMembers()
-  }
-
-  const removeMember = async (memberId: string) => {
-    await supabase.from("rosters").delete().eq("member_id", memberId)
-    await supabase.from("member_functions").delete().eq("member_id", memberId)
-    await supabase.from("department_members").delete().eq("id", memberId)
-    setMembers((prev) => prev.filter((m) => m.id !== memberId))
-  }
-
-  const removeFunctionFromMember = async (memberId: string, functionId: string) => {
-    await supabase
-      .from("member_functions")
-      .delete()
-      .eq("member_id", memberId)
-      .eq("function_id", functionId)
-    await loadMembers()
-  }
+  const members = ((membersRes.data as unknown as DepartmentMember[]) || []).sort((a, b) => {
+    const aIsLeader = leaderIds.includes(a.user_id)
+    const bIsLeader = leaderIds.includes(b.user_id)
+    if (aIsLeader && !bIsLeader) return -1
+    if (!aIsLeader && bIsLeader) return 1
+    return (a.profiles?.full_name || "").localeCompare(b.profiles?.full_name || "")
+  })
 
   return {
     members,
-    departmentLeaders,
+    departmentLeaders: leaderIds,
+    availableFunctions: functionsRes.data || [],
+    canEdit: isGlobalAdmin || !!leaderRecordRes.data,
+  }
+}
+
+async function fetchAvailableProfiles(
+  supabase: ReturnType<typeof createClient>,
+  departmentId: string
+): Promise<Profile[]> {
+  const { data: allProfiles } = await supabase.from("profiles").select("id, full_name, email").order("full_name")
+  const { data: existing } = await supabase
+    .from("department_members")
+    .select("user_id")
+    .eq("department_id", departmentId)
+  const existingIds = existing?.map((m) => m.user_id) || []
+  return (allProfiles || []).filter((p) => !existingIds.includes(p.id)) as Profile[]
+}
+
+export function useMemberList(departmentId: string | undefined) {
+  const supabase = createClient()
+  const queryClient = useQueryClient()
+  const queryKey = ["member-list", departmentId]
+
+  const { data, isLoading: loading } = useQuery({
+    queryKey,
+    queryFn: () => fetchMemberListData(supabase, departmentId!),
+    enabled: !!departmentId,
+  })
+
+  const { data: availableProfiles = [], refetch: refetchAvailableProfiles } = useQuery({
+    queryKey: ["available-profiles", departmentId],
+    queryFn: () => fetchAvailableProfiles(supabase, departmentId!),
+    enabled: false,
+  })
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey })
+
+  const addMemberMutation = useMutation({
+    mutationFn: async ({ userId, functionIds }: { userId: string; functionIds: string[] }) => {
+      const { data: newMember, error: memError } = await supabase
+        .from("department_members")
+        .insert({ department_id: departmentId!, user_id: userId, dept_role: "member" })
+        .select()
+        .single()
+
+      if (memError) throw new Error(memError.message)
+
+      if (functionIds.length > 0) {
+        const functionsToInsert = functionIds.map((funcId) => ({
+          member_id: newMember.id as string,
+          function_id: funcId,
+        }))
+
+        const { error: funcError } = await supabase.from("member_functions").insert(functionsToInsert)
+        if (funcError) throw new Error(funcError.message)
+      }
+    },
+    onSuccess: invalidate,
+  })
+
+  const addFunctionsToMemberMutation = useMutation({
+    mutationFn: async ({ memberId, functionIds }: { memberId: string; functionIds: string[] }) => {
+      if (functionIds.length === 0) return
+
+      const functionsToInsert = functionIds.map((funcId) => ({
+        member_id: memberId,
+        function_id: funcId,
+      }))
+
+      const { error } = await supabase.from("member_functions").insert(functionsToInsert)
+
+      if (error) {
+        if (error.code === "23505") throw new Error("O membro já possui uma das funções selecionadas.")
+        throw new Error(error.message)
+      }
+    },
+    onSuccess: invalidate,
+  })
+
+  const removeMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      await supabase.from("rosters").delete().eq("member_id", memberId)
+      await supabase.from("member_functions").delete().eq("member_id", memberId)
+      await supabase.from("department_members").delete().eq("id", memberId)
+    },
+    onSuccess: invalidate,
+  })
+
+  const removeFunctionFromMemberMutation = useMutation({
+    mutationFn: async ({ memberId, functionId }: { memberId: string; functionId: string }) => {
+      await supabase
+        .from("member_functions")
+        .delete()
+        .eq("member_id", memberId)
+        .eq("function_id", functionId)
+    },
+    onSuccess: invalidate,
+  })
+
+  return {
+    members: data?.members ?? [],
+    departmentLeaders: data?.departmentLeaders ?? [],
     loading,
-    canEdit,
+    canEdit: data?.canEdit ?? false,
     availableProfiles,
-    availableFunctions,
-    loadAvailableProfiles,
-    addMember,
-    addFunctionsToMember,
-    removeMember,
-    removeFunctionFromMember,
+    availableFunctions: data?.availableFunctions ?? [],
+    loadAvailableProfiles: () => refetchAvailableProfiles(),
+    addMember: (userId: string, functionIds: string[]) =>
+      addMemberMutation.mutateAsync({ userId, functionIds }),
+    addFunctionsToMember: (memberId: string, functionIds: string[]) =>
+      addFunctionsToMemberMutation.mutateAsync({ memberId, functionIds }),
+    removeMember: (memberId: string) => removeMemberMutation.mutateAsync(memberId),
+    removeFunctionFromMember: (memberId: string, functionId: string) =>
+      removeFunctionFromMemberMutation.mutateAsync({ memberId, functionId }),
   }
 }

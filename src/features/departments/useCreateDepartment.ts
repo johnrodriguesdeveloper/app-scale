@@ -1,9 +1,33 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import type { FeedbackModalProps } from "@/types/ui"
+
+interface CreateDepartmentContext {
+  organizationId: string | null
+  isMaster: boolean
+}
+
+async function fetchContext(supabase: ReturnType<typeof createClient>): Promise<CreateDepartmentContext> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { organizationId: null, isMaster: false }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("organization_id, org_role")
+    .eq("user_id", user.id)
+    .single()
+
+  return {
+    organizationId: profile?.organization_id ?? null,
+    isMaster: profile?.org_role === "master",
+  }
+}
 
 export function useCreateDepartment() {
   const router = useRouter()
@@ -12,9 +36,6 @@ export function useCreateDepartment() {
   const [name, setName] = useState("")
   const [priority, setPriority] = useState("")
   const [deadlineDay, setDeadlineDay] = useState("")
-  const [organizationId, setOrganizationId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [isMaster, setIsMaster] = useState(false)
 
   const [modalConfig, setModalConfig] = useState<Omit<FeedbackModalProps, "onClose">>({
     visible: false,
@@ -23,27 +44,13 @@ export function useCreateDepartment() {
     message: "",
   })
 
-  useEffect(() => {
-    async function loadUserData() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return
+  const { data: context } = useQuery({
+    queryKey: ["create-department-context"],
+    queryFn: () => fetchContext(supabase),
+  })
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("organization_id, org_role")
-        .eq("user_id", user.id)
-        .single()
-
-      if (profile) {
-        setOrganizationId(profile.organization_id)
-        setIsMaster(profile.org_role === "master")
-      }
-    }
-    loadUserData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const organizationId = context?.organizationId ?? null
+  const isMaster = context?.isMaster ?? false
 
   const showModal = (type: "success" | "error", title: string, message: string) => {
     setModalConfig({ visible: true, type, title, message })
@@ -57,7 +64,33 @@ export function useCreateDepartment() {
     }
   }
 
-  const handleSave = async () => {
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const priorityNum = parseInt(priority)
+      const deadlineNum = parseInt(deadlineDay)
+
+      const { error } = await supabase.from("departments").insert({
+        organization_id: organizationId!,
+        name: name.trim(),
+        priority_order: priorityNum,
+        availability_deadline_day: deadlineNum,
+      })
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      showModal("success", "Sucesso!", "Departamento criado com sucesso.")
+    },
+    onError: (error) => {
+      showModal(
+        "error",
+        "Erro ao Criar",
+        error instanceof Error ? error.message : "Ocorreu um erro inesperado."
+      )
+    },
+  })
+
+  const handleSave = () => {
     if (!name.trim())
       return showModal("error", "Campo Obrigatório", "Por favor, preencha o nome do departamento.")
 
@@ -73,26 +106,7 @@ export function useCreateDepartment() {
     if (!isMaster)
       return showModal("error", "Permissão Negada", "Apenas usuários Master podem criar departamentos.")
 
-    setLoading(true)
-    try {
-      const { error } = await supabase.from("departments").insert({
-        organization_id: organizationId,
-        name: name.trim(),
-        priority_order: priorityNum,
-        availability_deadline_day: deadlineNum,
-      })
-
-      if (error) throw error
-      showModal("success", "Sucesso!", "Departamento criado com sucesso.")
-    } catch (error) {
-      showModal(
-        "error",
-        "Erro ao Criar",
-        error instanceof Error ? error.message : "Ocorreu um erro inesperado."
-      )
-    } finally {
-      setLoading(false)
-    }
+    saveMutation.mutate()
   }
 
   return {
@@ -102,7 +116,7 @@ export function useCreateDepartment() {
     setPriority,
     deadlineDay,
     setDeadlineDay,
-    loading,
+    loading: saveMutation.isPending,
     modalConfig,
     handleSave,
     handleCloseModal,

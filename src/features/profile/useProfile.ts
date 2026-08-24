@@ -1,22 +1,57 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import type { FeedbackModalProps } from "@/types/ui"
 import type { UserProfile } from "@/types/profile"
 
+const queryKey = ["profile"]
+
+async function fetchProfile(supabase: ReturnType<typeof createClient>): Promise<UserProfile | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("full_name, avatar_url, phone, birth_date")
+    .eq("user_id", user.id)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
 export function useProfile() {
   const router = useRouter()
   const supabase = createClient()
+  const queryClient = useQueryClient()
 
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const { data: profile, isLoading: loading } = useQuery({
+    queryKey,
+    queryFn: () => fetchProfile(supabase),
+  })
 
   const [editingName, setEditingName] = useState("")
   const [editingPhone, setEditingPhone] = useState("")
   const [editingBirthDate, setEditingBirthDate] = useState("")
+  const initialized = useRef(false)
+
+  useEffect(() => {
+    if (!profile || initialized.current) return
+    initialized.current = true
+
+    setEditingName(profile.full_name || "")
+    setEditingPhone(profile.phone || "")
+
+    if (profile.birth_date) {
+      const [year, month, day] = profile.birth_date.split("-")
+      setEditingBirthDate(`${day}/${month}/${year}`)
+    }
+  }, [profile])
 
   const [modalConfig, setModalConfig] = useState<Omit<FeedbackModalProps, "onClose">>({
     visible: false,
@@ -24,41 +59,6 @@ export function useProfile() {
     title: "",
     message: "",
   })
-
-  useEffect(() => {
-    fetchProfile()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const fetchProfile = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("full_name, avatar_url, phone, birth_date")
-        .eq("user_id", user.id)
-        .single()
-
-      if (error) throw error
-
-      if (data) {
-        setProfile(data)
-        setEditingName(data.full_name || "")
-        setEditingPhone(data.phone || "")
-
-        if (data.birth_date) {
-          const [year, month, day] = data.birth_date.split("-")
-          setEditingBirthDate(`${day}/${month}/${year}`)
-        }
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleDateChange = (text: string) => {
     let cleaned = text.replace(/\D/g, "")
@@ -88,9 +88,8 @@ export function useProfile() {
     setModalConfig((prev) => ({ ...prev, visible: false }))
   }
 
-  const handleSaveProfile = async () => {
-    setSaving(true)
-    try {
+  const saveMutation = useMutation({
+    mutationFn: async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser()
@@ -112,18 +111,19 @@ export function useProfile() {
         .eq("user_id", user.id)
 
       if (error) throw error
-
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey })
       showModal("success", "Sucesso!", "Seus dados foram atualizados com sucesso.")
-    } catch (error) {
+    },
+    onError: (error) => {
       showModal(
         "error",
         "Erro",
         error instanceof Error ? error.message : "Falha ao salvar as alterações."
       )
-    } finally {
-      setSaving(false)
-    }
-  }
+    },
+  })
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -143,7 +143,7 @@ export function useProfile() {
   return {
     profile,
     loading,
-    saving,
+    saving: saveMutation.isPending,
     editingName,
     setEditingName,
     editingPhone,
@@ -151,7 +151,7 @@ export function useProfile() {
     modalConfig,
     handleDateChange,
     handlePhoneChange,
-    handleSaveProfile,
+    handleSaveProfile: () => saveMutation.mutateAsync(),
     handleLogout,
     getInitials,
     closeModal,

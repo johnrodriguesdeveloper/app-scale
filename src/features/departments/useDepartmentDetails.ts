@@ -1,176 +1,184 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import type { Department, DepartmentFunction, DepartmentMember } from "@/types/department"
 
-export function useDepartmentDetails(id: string | undefined) {
-  const router = useRouter()
-  const supabase = createClient()
+interface DepartmentDetailsData {
+  department: Department | null
+  parentDepartment: Department | null
+  subDepartments: Department[]
+  members: DepartmentMember[]
+  functions: DepartmentFunction[]
+  isAdmin: boolean
+  isMaster: boolean
+  isLeader: boolean
+}
 
-  const [department, setDepartment] = useState<Department | null>(null)
-  const [parentDepartment, setParentDepartment] = useState<Department | null>(null)
-  const [subDepartments, setSubDepartments] = useState<Department[]>([])
-  const [members, setMembers] = useState<DepartmentMember[]>([])
-  const [functions, setFunctions] = useState<DepartmentFunction[]>([])
-
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [isMaster, setIsMaster] = useState(false)
-  const [isLeader, setIsLeader] = useState(false)
-  const [loading, setLoading] = useState(true)
-
-  const fetchFunctions = async (departmentId: string) => {
-    const { data } = await supabase
-      .from("department_functions")
-      .select("id, name, description")
-      .eq("department_id", departmentId)
-      .order("name")
-    if (data) setFunctions(data)
+async function fetchDepartmentDetails(
+  supabase: ReturnType<typeof createClient>,
+  id: string
+): Promise<DepartmentDetailsData> {
+  const empty: DepartmentDetailsData = {
+    department: null,
+    parentDepartment: null,
+    subDepartments: [],
+    members: [],
+    functions: [],
+    isAdmin: false,
+    isMaster: false,
+    isLeader: false,
   }
 
-  const fetchSubDepartments = async (departmentId: string) => {
-    const { data } = await supabase
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return empty
+
+  const [profileRes, leaderRes, deptRes, membersRes, subDeptsRes, functionsRes] = await Promise.all([
+    supabase.from("profiles").select("org_role").eq("user_id", user.id).single(),
+    supabase
+      .from("department_leaders")
+      .select("id")
+      .eq("department_id", id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
       .from("departments")
-      .select("id, name, description, parent_id")
-      .eq("parent_id", departmentId)
-      .order("name")
-    if (data) setSubDepartments(data)
-  }
-
-  const fetchParentDepartment = async (parentId: string) => {
-    const { data } = await supabase.from("departments").select("id, name").eq("id", parentId).single()
-    if (data) setParentDepartment(data)
-  }
-
-  const fetchMembers = async (departmentId: string) => {
-    const { data } = await supabase
+      .select("id, name, description, priority_order, availability_deadline_day, parent_id, organization_id")
+      .eq("id", id)
+      .single(),
+    supabase
       .from("department_members")
       .select(
         "id, user_id, dept_role, profiles:user_id(full_name, email, avatar_url), member_functions(department_functions(id, name))"
       )
-      .eq("department_id", departmentId)
-    if (data) setMembers(data as unknown as DepartmentMember[])
+      .eq("department_id", id),
+    supabase
+      .from("departments")
+      .select("id, name, description, parent_id")
+      .eq("parent_id", id)
+      .order("name"),
+    supabase
+      .from("department_functions")
+      .select("id, name, description")
+      .eq("department_id", id)
+      .order("name"),
+  ])
+
+  const masterStatus = profileRes.data?.org_role === "master"
+  const isAdmin = profileRes.data?.org_role === "admin" || masterStatus
+
+  let parentDepartment: Department | null = null
+  if (deptRes.data?.parent_id) {
+    const { data } = await supabase
+      .from("departments")
+      .select("id, name")
+      .eq("id", deptRes.data.parent_id)
+      .single()
+    parentDepartment = data
   }
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true)
-      if (!id) {
-        setLoading(false)
-        return
-      }
+  return {
+    department: deptRes.data,
+    parentDepartment,
+    subDepartments: subDeptsRes.data || [],
+    members: (membersRes.data as unknown as DepartmentMember[]) || [],
+    functions: functionsRes.data || [],
+    isAdmin,
+    isMaster: masterStatus,
+    isLeader: !!leaderRes.data,
+  }
+}
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
-        setLoading(false)
-        return
-      }
+export function useDepartmentDetails(id: string | undefined) {
+  const router = useRouter()
+  const supabase = createClient()
+  const queryClient = useQueryClient()
+  const queryKey = ["department-details", id]
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("org_role")
-        .eq("user_id", user.id)
-        .single()
-      if (profile) {
-        const masterStatus = profile.org_role === "master"
-        setIsMaster(masterStatus)
-        setIsAdmin(profile.org_role === "admin" || masterStatus)
-      }
+  const { data, isLoading: loading } = useQuery({
+    queryKey,
+    queryFn: () => fetchDepartmentDetails(supabase, id!),
+    enabled: !!id,
+  })
 
-      const { data: leaderCheck } = await supabase
-        .from("department_leaders")
-        .select("id")
-        .eq("department_id", id)
-        .eq("user_id", user.id)
-        .maybeSingle()
-      if (leaderCheck) setIsLeader(true)
+  const invalidate = () => queryClient.invalidateQueries({ queryKey })
 
-      const { data: dept } = await supabase
-        .from("departments")
-        .select("id, name, description, priority_order, availability_deadline_day, parent_id, organization_id")
-        .eq("id", id)
-        .single()
+  const removeMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      await supabase.from("rosters").delete().eq("member_id", memberId)
+      await supabase.from("department_members").delete().eq("id", memberId)
+    },
+    onSuccess: invalidate,
+  })
 
-      if (dept) {
-        setDepartment(dept)
-        if (dept.parent_id) await fetchParentDepartment(dept.parent_id)
-      }
+  const deleteSubDepartmentMutation = useMutation({
+    mutationFn: async (subDeptId: string) => {
+      const { error } = await supabase.from("departments").delete().eq("id", subDeptId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
 
-      await fetchMembers(id)
-      await fetchSubDepartments(id)
-      await fetchFunctions(id)
-      setLoading(false)
-    }
-    loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  const deleteFunctionMutation = useMutation({
+    mutationFn: async (funcId: string) => {
+      const { error } = await supabase.from("department_functions").delete().eq("id", funcId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  const createFunctionMutation = useMutation({
+    mutationFn: async (name: string) => {
+      if (!name.trim() || !id) throw new Error("Nome inválido")
+      const { error } = await supabase
+        .from("department_functions")
+        .insert({ department_id: id, name: name.trim() })
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  const createSubDepartmentMutation = useMutation({
+    mutationFn: async (name: string) => {
+      if (!name.trim() || !id || !data?.department) throw new Error("Nome inválido")
+      const { error } = await supabase.from("departments").insert({
+        name: name.trim(),
+        parent_id: id,
+        organization_id: data.department.organization_id!,
+        availability_deadline_day: data.department.availability_deadline_day || 20,
+        priority_order: 99,
+      })
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
 
   const handleBack = () => {
-    if (department?.parent_id) {
-      router.push(`/departments/${department.parent_id}`)
+    if (data?.department?.parent_id) {
+      router.push(`/departments/${data.department.parent_id}`)
     } else {
       router.push("/departments")
     }
   }
 
-  const removeMember = async (memberId: string) => {
-    await supabase.from("rosters").delete().eq("member_id", memberId)
-    await supabase.from("department_members").delete().eq("id", memberId)
-    setMembers((prev) => prev.filter((m) => m.id !== memberId))
-  }
-
-  const deleteSubDepartment = async (subDeptId: string) => {
-    const { error } = await supabase.from("departments").delete().eq("id", subDeptId)
-    if (error) throw error
-    setSubDepartments((prev) => prev.filter((s) => s.id !== subDeptId))
-  }
-
-  const deleteFunction = async (funcId: string) => {
-    const { error } = await supabase.from("department_functions").delete().eq("id", funcId)
-    if (error) throw error
-    setFunctions((prev) => prev.filter((f) => f.id !== funcId))
-  }
-
-  const createFunction = async (name: string) => {
-    if (!name.trim() || !id) throw new Error("Nome inválido")
-    const { error } = await supabase
-      .from("department_functions")
-      .insert({ department_id: id, name: name.trim() })
-    if (error) throw error
-    await fetchFunctions(id)
-  }
-
-  const createSubDepartment = async (name: string) => {
-    if (!name.trim() || !id || !department) throw new Error("Nome inválido")
-    const { error } = await supabase.from("departments").insert({
-      name: name.trim(),
-      parent_id: id,
-      organization_id: department.organization_id!,
-      availability_deadline_day: department.availability_deadline_day || 20,
-      priority_order: 99,
-    })
-    if (error) throw error
-    await fetchSubDepartments(id)
-  }
-
   return {
-    department,
-    parentDepartment,
-    subDepartments,
-    members,
-    functions,
-    isAdmin,
-    isMaster,
-    isLeader,
+    department: data?.department ?? null,
+    parentDepartment: data?.parentDepartment ?? null,
+    subDepartments: data?.subDepartments ?? [],
+    members: data?.members ?? [],
+    functions: data?.functions ?? [],
+    isAdmin: data?.isAdmin ?? false,
+    isMaster: data?.isMaster ?? false,
+    isLeader: data?.isLeader ?? false,
     loading,
     handleBack,
-    removeMember,
-    deleteSubDepartment,
-    deleteFunction,
-    createFunction,
-    createSubDepartment,
+    removeMember: (memberId: string) => removeMemberMutation.mutateAsync(memberId),
+    deleteSubDepartment: (subDeptId: string) => deleteSubDepartmentMutation.mutateAsync(subDeptId),
+    deleteFunction: (funcId: string) => deleteFunctionMutation.mutateAsync(funcId),
+    createFunction: (name: string) => createFunctionMutation.mutateAsync(name),
+    createSubDepartment: (name: string) => createSubDepartmentMutation.mutateAsync(name),
   }
 }

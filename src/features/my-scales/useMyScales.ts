@@ -1,95 +1,88 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { format, startOfDay } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import type { Scale, TeamMember } from "@/types/my-scales"
 
+async function fetchMyScales(supabase: ReturnType<typeof createClient>): Promise<Scale[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data: memberData } = await supabase
+    .from("department_members")
+    .select("id")
+    .eq("user_id", user.id)
+
+  if (!memberData || memberData.length === 0) return []
+
+  const memberIds = memberData.map((m) => m.id).filter((id): id is string => !!id)
+  const today = format(startOfDay(new Date()), "yyyy-MM-dd")
+
+  const { data: scaleData } = await supabase
+    .from("rosters")
+    .select(
+      "id, schedule_date, department_id, service_day_id, department_functions(name), departments(name), service_days(name)"
+    )
+    .in("member_id", memberIds)
+    .gte("schedule_date", today)
+    .order("schedule_date", { ascending: true })
+
+  return (scaleData as unknown as Scale[]) || []
+}
+
+async function fetchScaleTeam(
+  supabase: ReturnType<typeof createClient>,
+  scale: Scale
+): Promise<TeamMember[]> {
+  const { data } = await supabase
+    .from("rosters")
+    .select("id, department_functions(name), department_members(profiles(full_name, phone))")
+    .eq("department_id", scale.department_id)
+    .eq("schedule_date", scale.schedule_date)
+    .eq("service_day_id", scale.service_day_id ?? "")
+
+  if (!data) return []
+
+  const team: TeamMember[] = data.map((item) => ({
+    id: item.id,
+    function_name: item.department_functions?.name || "Sem função",
+    member_name: item.department_members?.profiles?.full_name || "Usuário",
+    member_phone: item.department_members?.profiles?.phone || null,
+  }))
+
+  team.sort((a, b) => a.function_name.localeCompare(b.function_name))
+  return team
+}
+
 export function useMyScales() {
   const supabase = createClient()
 
-  const [scales, setScales] = useState<Scale[]>([])
-  const [loading, setLoading] = useState(true)
   const [modalVisible, setModalVisible] = useState(false)
   const [selectedScale, setSelectedScale] = useState<Scale | null>(null)
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
-  const [loadingTeam, setLoadingTeam] = useState(false)
 
-  const fetchMyScales = useCallback(async () => {
-    try {
-      setLoading(true)
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return
+  const { data: scales = [], isLoading: loading } = useQuery({
+    queryKey: ["my-scales"],
+    queryFn: () => fetchMyScales(supabase),
+  })
 
-      const { data: memberData } = await supabase
-        .from("department_members")
-        .select("id")
-        .eq("user_id", user.id)
+  const { data: teamMembers = [], isFetching: loadingTeam } = useQuery({
+    queryKey: [
+      "scale-team",
+      selectedScale?.department_id,
+      selectedScale?.schedule_date,
+      selectedScale?.service_day_id,
+    ],
+    queryFn: () => fetchScaleTeam(supabase, selectedScale!),
+    enabled: modalVisible && !!selectedScale,
+  })
 
-      if (!memberData || memberData.length === 0) {
-        setLoading(false)
-        return
-      }
-
-      const memberIds = memberData.map((m) => m.id).filter((id): id is string => !!id)
-      const today = format(startOfDay(new Date()), "yyyy-MM-dd")
-
-      const { data: scaleData } = await supabase
-        .from("rosters")
-        .select(
-          "id, schedule_date, department_id, service_day_id, department_functions(name), departments(name), service_days(name)"
-        )
-        .in("member_id", memberIds)
-        .gte("schedule_date", today)
-        .order("schedule_date", { ascending: true })
-
-      if (scaleData) {
-        setScales(scaleData as unknown as Scale[])
-      }
-    } finally {
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    fetchMyScales()
-  }, [fetchMyScales])
-
-  const handleOpenScaleDetails = async (scale: Scale) => {
+  const handleOpenScaleDetails = (scale: Scale) => {
     setSelectedScale(scale)
     setModalVisible(true)
-    setLoadingTeam(true)
-
-    try {
-      const { data } = await supabase
-        .from("rosters")
-        .select("id, department_functions(name), department_members(profiles(full_name, phone))")
-        .eq("department_id", scale.department_id)
-        .eq("schedule_date", scale.schedule_date)
-        .eq("service_day_id", scale.service_day_id ?? "")
-
-      if (data) {
-        const team: TeamMember[] = data.map((item) => {
-          const funcName = item.department_functions?.name
-          const profile = item.department_members?.profiles
-
-          return {
-            id: item.id,
-            function_name: funcName || "Sem função",
-            member_name: profile?.full_name || "Usuário",
-            member_phone: profile?.phone || null,
-          }
-        })
-
-        team.sort((a, b) => a.function_name.localeCompare(b.function_name))
-        setTeamMembers(team)
-      }
-    } finally {
-      setLoadingTeam(false)
-    }
   }
 
   const handleOpenWhatsApp = (phone: string | null, name: string) => {

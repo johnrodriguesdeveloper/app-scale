@@ -1,18 +1,46 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import type { DepartmentLeader, LeaderSearchResult } from "@/types/department-leaders"
 
+interface LeadersData {
+  leaders: DepartmentLeader[]
+  currentOrgId: string | null
+}
+
+async function fetchLeadersData(
+  supabase: ReturnType<typeof createClient>,
+  departmentId: string
+): Promise<LeadersData> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const [profileRes, leadersRes] = await Promise.all([
+    user
+      ? supabase.from("profiles").select("organization_id").eq("user_id", user.id).single()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("department_leaders")
+      .select("id, user_id, profiles:user_id(id, full_name, email, avatar_url)")
+      .eq("department_id", departmentId)
+      .order("created_at", { ascending: false }),
+  ])
+
+  return {
+    leaders: (leadersRes.data as unknown as DepartmentLeader[]) || [],
+    currentOrgId: profileRes.data?.organization_id ?? null,
+  }
+}
+
 export function useDepartmentLeaders(departmentId: string | undefined) {
   const supabase = createClient()
+  const queryClient = useQueryClient()
+  const queryKey = ["department-leaders", departmentId]
 
-  const [leaders, setLeaders] = useState<DepartmentLeader[]>([])
-  const [searchResults, setSearchResults] = useState<LeaderSearchResult[]>([])
   const [searchText, setSearchText] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [searching, setSearching] = useState(false)
-  const [currentOrgId, setCurrentOrgId] = useState<string | null>(null)
 
   const [confirmModalVisible, setConfirmModalVisible] = useState(false)
   const [confirmConfig, setConfirmConfig] = useState({
@@ -22,100 +50,66 @@ export function useDepartmentLeaders(departmentId: string | undefined) {
     loading: false,
   })
 
-  const fetchOrganizationId = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return
+  const { data, isLoading: loading } = useQuery({
+    queryKey,
+    queryFn: () => fetchLeadersData(supabase, departmentId!),
+    enabled: !!departmentId,
+  })
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .single()
+  const leaders = data?.leaders ?? []
+  const currentOrgId = data?.currentOrgId ?? null
 
-    if (profile?.organization_id) {
-      setCurrentOrgId(profile.organization_id)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const fetchLeaders = useCallback(async () => {
-    if (!departmentId) return
-    try {
-      setLoading(true)
-      const { data, error } = await supabase
-        .from("department_leaders")
-        .select("id, user_id, profiles:user_id(id, full_name, email, avatar_url)")
-        .eq("department_id", departmentId)
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-      if (data) setLeaders(data as unknown as DepartmentLeader[])
-    } finally {
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [departmentId])
-
-  useEffect(() => {
-    fetchOrganizationId()
-    fetchLeaders()
-  }, [fetchOrganizationId, fetchLeaders])
-
-  const searchUsers = async (text: string) => {
-    setSearchText(text)
-
-    if (text.length < 3 || !currentOrgId) {
-      setSearchResults([])
-      return
-    }
-
-    try {
-      setSearching(true)
+  const { data: searchResults = [], isFetching: searching } = useQuery({
+    queryKey: ["leader-search", currentOrgId, searchText],
+    queryFn: async (): Promise<LeaderSearchResult[]> => {
       const { data, error } = await supabase
         .from("profiles")
         .select("id, full_name, email, avatar_url")
-        .eq("organization_id", currentOrgId)
-        .ilike("full_name", `%${text}%`)
+        .eq("organization_id", currentOrgId!)
+        .ilike("full_name", `%${searchText}%`)
         .neq("org_role", "master")
         .limit(10)
 
       if (error) throw error
 
       const leaderUserIds = leaders.map((leader) => leader.user_id)
-      const availableUsers = (data || []).filter((u) => !leaderUserIds.includes(u.id))
+      return ((data || []) as unknown as LeaderSearchResult[]).filter(
+        (u) => !leaderUserIds.includes(u.id)
+      )
+    },
+    enabled: searchText.length >= 3 && !!currentOrgId,
+  })
 
-      setSearchResults(availableUsers as unknown as LeaderSearchResult[])
-    } finally {
-      setSearching(false)
-    }
-  }
+  const invalidate = () => queryClient.invalidateQueries({ queryKey })
 
-  const handleAddLeader = async (userId: string) => {
-    if (!departmentId) return
-    try {
+  const addLeaderMutation = useMutation({
+    mutationFn: async (userId: string) => {
       const { error } = await supabase.from("department_leaders").insert({
-        department_id: departmentId,
+        department_id: departmentId!,
         user_id: userId,
       })
 
       if (error) {
-        if (error.code === "23505") {
-          window.alert("Este usuário já é líder deste departamento.")
-        } else {
-          throw error
-        }
-        return
+        if (error.code === "23505") throw new Error("Este usuário já é líder deste departamento.")
+        throw error
       }
-
+    },
+    onSuccess: () => {
       setSearchText("")
-      setSearchResults([])
-      await fetchLeaders()
-    } catch (error) {
+      invalidate()
+    },
+    onError: (error) => {
       window.alert(error instanceof Error ? error.message : "Não foi possível adicionar o líder.")
-    }
-  }
+    },
+  })
+
+  const removeLeaderMutation = useMutation({
+    mutationFn: async (leaderId: string) => {
+      const { error } = await supabase.from("department_leaders").delete().eq("id", leaderId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
 
   const requestRemoveLeader = (leaderId: string, userName: string) => {
     setConfirmConfig({
@@ -130,13 +124,7 @@ export function useDepartmentLeaders(departmentId: string | undefined) {
   const executeRemoveLeader = async () => {
     setConfirmConfig((prev) => ({ ...prev, loading: true }))
     try {
-      const { error } = await supabase
-        .from("department_leaders")
-        .delete()
-        .eq("id", confirmConfig.targetId)
-
-      if (error) throw error
-      await fetchLeaders()
+      await removeLeaderMutation.mutateAsync(confirmConfig.targetId)
       setConfirmModalVisible(false)
     } catch {
       window.alert("Não foi possível remover o líder.")
@@ -155,8 +143,8 @@ export function useDepartmentLeaders(departmentId: string | undefined) {
     confirmModalVisible,
     setConfirmModalVisible,
     confirmConfig,
-    searchUsers,
-    handleAddLeader,
+    searchUsers: (text: string) => setSearchText(text),
+    handleAddLeader: (userId: string) => addLeaderMutation.mutateAsync(userId),
     requestRemoveLeader,
     executeRemoveLeader,
   }

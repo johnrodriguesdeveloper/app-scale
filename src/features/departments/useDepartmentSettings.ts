@@ -1,17 +1,57 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import type { DepartmentFunction } from "@/types/department"
 import type { DepartmentMemberSetting } from "@/types/department-settings"
 
+interface DepartmentSettingsData {
+  functions: DepartmentFunction[]
+  members: DepartmentMemberSetting[]
+}
+
+async function fetchDepartmentSettingsData(
+  supabase: ReturnType<typeof createClient>,
+  departmentId: string
+): Promise<DepartmentSettingsData> {
+  const [functionsRes, membersRes] = await Promise.all([
+    supabase.from("department_functions").select("id, name").eq("department_id", departmentId).order("name"),
+    supabase
+      .from("department_members")
+      .select(
+        "id, user_id, profiles!inner(id, full_name, email), member_functions(function_id, department_functions(id, name))"
+      )
+      .eq("department_id", departmentId),
+  ])
+
+  const members = (membersRes.data || []).map((m) => ({
+    id: m.id,
+    user_id: m.user_id,
+    profiles: m.profiles,
+    member_functions: m.member_functions || [],
+  }))
+
+  return {
+    functions: functionsRes.data || [],
+    members: members as unknown as DepartmentMemberSetting[],
+  }
+}
+
 export function useDepartmentSettings(departmentId: string | undefined) {
   const supabase = createClient()
+  const queryClient = useQueryClient()
+  const queryKey = ["department-settings", departmentId]
 
-  const [functions, setFunctions] = useState<DepartmentFunction[]>([])
-  const [members, setMembers] = useState<DepartmentMemberSetting[]>([])
+  const { data } = useQuery({
+    queryKey,
+    queryFn: () => fetchDepartmentSettingsData(supabase, departmentId!),
+    enabled: !!departmentId,
+  })
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey })
+
   const [newFunctionName, setNewFunctionName] = useState("")
-  const [loading, setLoading] = useState(false)
 
   const [confirmModalVisible, setConfirmModalVisible] = useState(false)
   const [confirmConfig, setConfirmConfig] = useState({
@@ -21,64 +61,57 @@ export function useDepartmentSettings(departmentId: string | undefined) {
     loading: false,
   })
 
-  const loadFunctions = useCallback(async () => {
-    if (!departmentId) return
-    const { data } = await supabase
-      .from("department_functions")
-      .select("id, name")
-      .eq("department_id", departmentId)
-      .order("name")
-
-    if (data) setFunctions(data)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [departmentId])
-
-  const loadMembers = useCallback(async () => {
-    if (!departmentId) return
-    const { data } = await supabase
-      .from("department_members")
-      .select(
-        "id, user_id, profiles!inner(id, full_name, email), member_functions(function_id, department_functions(id, name))"
-      )
-      .eq("department_id", departmentId)
-
-    if (data) {
-      const formattedMembers = data.map((m) => ({
-        id: m.id,
-        user_id: m.user_id,
-        profiles: m.profiles,
-        member_functions: m.member_functions || [],
-      }))
-      setMembers(formattedMembers as unknown as DepartmentMemberSetting[])
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [departmentId])
-
-  useEffect(() => {
-    loadFunctions()
-    loadMembers()
-  }, [loadFunctions, loadMembers])
-
-  const addFunction = async () => {
-    if (!newFunctionName.trim() || !departmentId) return
-
-    setLoading(true)
-    try {
-      const { data, error } = await supabase
+  const addFunctionMutation = useMutation({
+    mutationFn: async () => {
+      if (!newFunctionName.trim() || !departmentId) return
+      const { error } = await supabase
         .from("department_functions")
         .insert({ department_id: departmentId, name: newFunctionName.trim() })
-        .select()
-        .single()
-
       if (error) throw error
-      setFunctions((prev) => [...prev, data])
+    },
+    onSuccess: () => {
       setNewFunctionName("")
-    } catch (error) {
+      invalidate()
+    },
+    onError: (error) => {
       window.alert(error instanceof Error ? error.message : "Erro ao adicionar função")
-    } finally {
-      setLoading(false)
-    }
-  }
+    },
+  })
+
+  const deleteFunctionMutation = useMutation({
+    mutationFn: async (functionId: string) => {
+      const { error } = await supabase.from("department_functions").delete().eq("id", functionId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  const toggleMemberFunctionMutation = useMutation({
+    mutationFn: async ({
+      memberId,
+      functionId,
+      hasFunction,
+    }: {
+      memberId: string
+      functionId: string
+      hasFunction: boolean
+    }) => {
+      if (hasFunction) {
+        const { error } = await supabase
+          .from("member_functions")
+          .delete()
+          .eq("member_id", memberId)
+          .eq("function_id", functionId)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from("member_functions")
+          .insert({ member_id: memberId, function_id: functionId })
+        if (error) throw error
+      }
+    },
+    onSuccess: invalidate,
+  })
 
   const requestDeleteFunction = (functionId: string, functionName: string) => {
     setConfirmConfig({
@@ -93,14 +126,7 @@ export function useDepartmentSettings(departmentId: string | undefined) {
   const executeDeleteFunction = async () => {
     setConfirmConfig((prev) => ({ ...prev, loading: true }))
     try {
-      const { error } = await supabase
-        .from("department_functions")
-        .delete()
-        .eq("id", confirmConfig.targetId)
-
-      if (error) throw error
-      setFunctions((prev) => prev.filter((f) => f.id !== confirmConfig.targetId))
-      await loadMembers()
+      await deleteFunctionMutation.mutateAsync(confirmConfig.targetId)
       setConfirmModalVisible(false)
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Erro ao remover função")
@@ -110,40 +136,19 @@ export function useDepartmentSettings(departmentId: string | undefined) {
     }
   }
 
-  // memberId here refers to the department_members.id (the FK member_functions.member_id expects) -
-  // callers must pass member.id, not member.user_id.
-  const toggleMemberFunction = async (memberId: string, functionId: string, hasFunction: boolean) => {
-    try {
-      if (hasFunction) {
-        const { error } = await supabase
-          .from("member_functions")
-          .delete()
-          .eq("member_id", memberId)
-          .eq("function_id", functionId)
-        if (!error) await loadMembers()
-      } else {
-        const { error } = await supabase
-          .from("member_functions")
-          .insert({ member_id: memberId, function_id: functionId })
-        if (!error) await loadMembers()
-      }
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
   return {
-    functions,
-    members,
+    functions: data?.functions ?? [],
+    members: data?.members ?? [],
     newFunctionName,
     setNewFunctionName,
-    loading,
+    loading: addFunctionMutation.isPending,
     confirmModalVisible,
     setConfirmModalVisible,
     confirmConfig,
-    addFunction,
+    addFunction: () => addFunctionMutation.mutateAsync(),
     requestDeleteFunction,
     executeDeleteFunction,
-    toggleMemberFunction,
+    toggleMemberFunction: (memberId: string, functionId: string, hasFunction: boolean) =>
+      toggleMemberFunctionMutation.mutateAsync({ memberId, functionId, hasFunction }),
   }
 }

@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   addMonths,
   eachDayOfInterval,
@@ -22,22 +23,140 @@ import type {
   RosterGridMember,
 } from "@/types/department-roster"
 
+interface RosterStructure {
+  allServiceDays: ServiceDay[]
+  functions: DepartmentFunction[]
+  members: RosterGridMember[]
+}
+
+interface RosterMonthData {
+  gridColumns: GridColumn[]
+  rosterEntries: RosterGridEntry[]
+  availabilityExceptions: AvailabilityExceptionEntry[]
+  regularAvailabilities: RegularAvailabilityEntry[]
+  busyUsers: BusyUserEntry[]
+}
+
+async function fetchRosterStructure(
+  supabase: ReturnType<typeof createClient>,
+  departmentId: string
+): Promise<RosterStructure> {
+  const [servicesRes, funcsRes, membersRes] = await Promise.all([
+    supabase.from("service_days").select("*").order("day_of_week"),
+    supabase.from("department_functions").select("*").eq("department_id", departmentId).order("name"),
+    supabase
+      .from("department_members")
+      .select("id, user_id, member_functions(function_id), profiles:user_id(full_name, avatar_url)")
+      .eq("department_id", departmentId),
+  ])
+
+  return {
+    allServiceDays: servicesRes.data || [],
+    functions: funcsRes.data || [],
+    members: (membersRes.data as unknown as RosterGridMember[]) || [],
+  }
+}
+
+async function fetchRosterCanEdit(
+  supabase: ReturnType<typeof createClient>,
+  departmentId: string
+): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return false
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("org_role")
+    .eq("user_id", user.id)
+    .single()
+
+  const isGlobalAdmin = profile?.org_role === "admin" || profile?.org_role === "master"
+
+  const { data: leaderRecord } = await supabase
+    .from("department_leaders")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("department_id", departmentId)
+    .maybeSingle()
+
+  return isGlobalAdmin || !!leaderRecord
+}
+
+async function fetchRosterMonthData(
+  supabase: ReturnType<typeof createClient>,
+  departmentId: string,
+  currentMonth: Date,
+  allServiceDays: ServiceDay[]
+): Promise<RosterMonthData> {
+  const start = startOfMonth(currentMonth)
+  const end = endOfMonth(currentMonth)
+  const startStr = format(start, "yyyy-MM-dd")
+  const endStr = format(end, "yyyy-MM-dd")
+
+  const days = eachDayOfInterval({ start, end })
+  const gridColumns: GridColumn[] = []
+  days.forEach((day) => {
+    const dayOfWeek = getDay(day)
+    const servicesForDay = allServiceDays.filter((sd) => sd.day_of_week === dayOfWeek)
+    servicesForDay.forEach((service) => {
+      gridColumns.push({ date: day, dateStr: format(day, "yyyy-MM-dd"), service })
+    })
+  })
+
+  const [rostersRes, exceptionsRes, availabilitiesRes, conflictsRes] = await Promise.all([
+    supabase
+      .from("rosters")
+      .select(
+        "id, function_id, member_id, service_day_id, schedule_date, department_members:member_id(user_id, profiles:user_id(full_name))"
+      )
+      .eq("department_id", departmentId)
+      .gte("schedule_date", startStr)
+      .lte("schedule_date", endStr),
+    supabase
+      .from("availability_exceptions")
+      .select("user_id, service_day_id, specific_date, is_available")
+      .gte("specific_date", startStr)
+      .lte("specific_date", endStr),
+    supabase.from("availability_routine").select("user_id, service_day_id, is_available"),
+    supabase
+      .from("rosters")
+      .select("schedule_date, service_day_id, department_members!inner(user_id)")
+      .gte("schedule_date", startStr)
+      .lte("schedule_date", endStr),
+  ])
+
+  const rosterEntries: RosterGridEntry[] = (rostersRes.data || []).map((r) => ({
+    id: r.id,
+    function_id: r.function_id,
+    member_id: r.member_id,
+    service_day_id: r.service_day_id,
+    schedule_date: r.schedule_date,
+    member_name: r.department_members?.profiles?.full_name || "Escalado",
+  }))
+
+  const busyUsers: BusyUserEntry[] = (conflictsRes.data || []).map((c) => ({
+    user_id: c.department_members?.user_id,
+    service_day_id: c.service_day_id,
+    schedule_date: c.schedule_date,
+  }))
+
+  return {
+    gridColumns,
+    rosterEntries,
+    availabilityExceptions: exceptionsRes.data || [],
+    regularAvailabilities: availabilitiesRes.data || [],
+    busyUsers,
+  }
+}
+
 export function useDepartmentRosterGrid(departmentId: string | undefined) {
   const supabase = createClient()
+  const queryClient = useQueryClient()
 
   const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()))
-  const [loading, setLoading] = useState(true)
-
-  const [allServiceDays, setAllServiceDays] = useState<ServiceDay[]>([])
-  const [functions, setFunctions] = useState<DepartmentFunction[]>([])
-  const [members, setMembers] = useState<RosterGridMember[]>([])
-
-  const [gridColumns, setGridColumns] = useState<GridColumn[]>([])
-  const [rosterEntries, setRosterEntries] = useState<RosterGridEntry[]>([])
-
-  const [availabilityExceptions, setAvailabilityExceptions] = useState<AvailabilityExceptionEntry[]>([])
-  const [regularAvailabilities, setRegularAvailabilities] = useState<RegularAvailabilityEntry[]>([])
-  const [busyUsers, setBusyUsers] = useState<BusyUserEntry[]>([])
+  const monthKey = format(currentMonth, "yyyy-MM")
 
   const [showMemberSelect, setShowMemberSelect] = useState(false)
   const [selectedCell, setSelectedCell] = useState<{
@@ -47,145 +166,34 @@ export function useDepartmentRosterGrid(departmentId: string | undefined) {
     date: Date
     currentRosterId?: string
   } | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [canEdit, setCanEdit] = useState(false)
 
-  useEffect(() => {
-    if (!departmentId) return
+  const { data: structure } = useQuery({
+    queryKey: ["roster-structure", departmentId],
+    queryFn: () => fetchRosterStructure(supabase, departmentId!),
+    enabled: !!departmentId,
+  })
 
-    async function checkPermissions() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return
+  const { data: canEdit = false } = useQuery({
+    queryKey: ["roster-can-edit", departmentId],
+    queryFn: () => fetchRosterCanEdit(supabase, departmentId!),
+    enabled: !!departmentId,
+  })
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("org_role")
-        .eq("user_id", user.id)
-        .single()
+  const monthQueryKey = ["roster-month", departmentId, monthKey]
 
-      const isGlobalAdmin = profile?.org_role === "admin" || profile?.org_role === "master"
+  const { data: monthData, isLoading: loading } = useQuery({
+    queryKey: monthQueryKey,
+    queryFn: () => fetchRosterMonthData(supabase, departmentId!, currentMonth, structure!.allServiceDays),
+    enabled: !!departmentId && !!structure,
+  })
 
-      const { data: leaderRecord } = await supabase
-        .from("department_leaders")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("department_id", departmentId!)
-        .maybeSingle()
-
-      setCanEdit(isGlobalAdmin || !!leaderRecord)
-    }
-
-    checkPermissions()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [departmentId])
-
-  const loadStructure = useCallback(async () => {
-    if (!departmentId) return
-
-    const [servicesRes, funcsRes, membersRes] = await Promise.all([
-      supabase.from("service_days").select("*").order("day_of_week"),
-      supabase.from("department_functions").select("*").eq("department_id", departmentId).order("name"),
-      supabase
-        .from("department_members")
-        .select("id, user_id, member_functions(function_id), profiles:user_id(full_name, avatar_url)")
-        .eq("department_id", departmentId),
-    ])
-
-    if (servicesRes.data) setAllServiceDays(servicesRes.data)
-    if (funcsRes.data) setFunctions(funcsRes.data)
-
-    if (membersRes.data) {
-      setMembers(membersRes.data as unknown as RosterGridMember[])
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [departmentId])
-
-  const loadMonthData = useCallback(async () => {
-    if (!departmentId || allServiceDays.length === 0) return
-    setLoading(true)
-
-    try {
-      const start = startOfMonth(currentMonth)
-      const end = endOfMonth(currentMonth)
-      const startStr = format(start, "yyyy-MM-dd")
-      const endStr = format(end, "yyyy-MM-dd")
-
-      const days = eachDayOfInterval({ start, end })
-      const cols: GridColumn[] = []
-      days.forEach((day) => {
-        const dayOfWeek = getDay(day)
-        const servicesForDay = allServiceDays.filter((sd) => sd.day_of_week === dayOfWeek)
-        servicesForDay.forEach((service) => {
-          cols.push({ date: day, dateStr: format(day, "yyyy-MM-dd"), service })
-        })
-      })
-      setGridColumns(cols)
-
-      const { data: rosters } = await supabase
-        .from("rosters")
-        .select(
-          "id, function_id, member_id, service_day_id, schedule_date, department_members:member_id(user_id, profiles:user_id(full_name))"
-        )
-        .eq("department_id", departmentId)
-        .gte("schedule_date", startStr)
-        .lte("schedule_date", endStr)
-
-      if (rosters) {
-        const formattedRosters: RosterGridEntry[] = rosters.map((r) => ({
-          id: r.id,
-          function_id: r.function_id,
-          member_id: r.member_id,
-          service_day_id: r.service_day_id,
-          schedule_date: r.schedule_date,
-          member_name: r.department_members?.profiles?.full_name || "Escalado",
-        }))
-        setRosterEntries(formattedRosters)
-      }
-
-      const { data: exceptions } = await supabase
-        .from("availability_exceptions")
-        .select("user_id, service_day_id, specific_date, is_available")
-        .gte("specific_date", startStr)
-        .lte("specific_date", endStr)
-
-      if (exceptions) setAvailabilityExceptions(exceptions)
-
-      const { data: availabilities } = await supabase
-        .from("availability_routine")
-        .select("user_id, service_day_id, is_available")
-
-      if (availabilities) setRegularAvailabilities(availabilities)
-
-      const { data: conflicts } = await supabase
-        .from("rosters")
-        .select("schedule_date, service_day_id, department_members!inner(user_id)")
-        .gte("schedule_date", startStr)
-        .lte("schedule_date", endStr)
-
-      if (conflicts) {
-        setBusyUsers(
-          conflicts.map((c) => ({
-            user_id: c.department_members?.user_id,
-            service_day_id: c.service_day_id,
-            schedule_date: c.schedule_date,
-          }))
-        )
-      }
-    } finally {
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [departmentId, currentMonth, allServiceDays])
-
-  useEffect(() => {
-    loadStructure()
-  }, [loadStructure])
-
-  useEffect(() => {
-    loadMonthData()
-  }, [loadMonthData])
+  const functions = structure?.functions ?? []
+  const members = structure?.members ?? []
+  const gridColumns = monthData?.gridColumns ?? []
+  const rosterEntries = monthData?.rosterEntries ?? []
+  const availabilityExceptions = monthData?.availabilityExceptions ?? []
+  const regularAvailabilities = monthData?.regularAvailabilities ?? []
+  const busyUsers = monthData?.busyUsers ?? []
 
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
@@ -235,10 +243,12 @@ export function useDepartmentRosterGrid(departmentId: string | undefined) {
     })
   }
 
-  const handleAddMember = async (memberDbId: string) => {
-    if (!selectedCell || !departmentId || !canEdit) return
-    setSaving(true)
-    try {
+  const invalidateMonth = () => queryClient.invalidateQueries({ queryKey: monthQueryKey })
+
+  const addMemberMutation = useMutation({
+    mutationFn: async (memberDbId: string) => {
+      if (!selectedCell || !departmentId || !canEdit) return
+
       if (selectedCell.currentRosterId) {
         await supabase.from("rosters").delete().eq("id", selectedCell.currentRosterId)
       }
@@ -252,29 +262,30 @@ export function useDepartmentRosterGrid(departmentId: string | undefined) {
       })
 
       if (error) throw error
+    },
+    onSuccess: () => {
       setShowMemberSelect(false)
-      await loadMonthData()
-    } catch (err) {
+      invalidateMonth()
+    },
+    onError: (err) => {
       window.alert(err instanceof Error ? err.message : "Erro ao escalar membro.")
-    } finally {
-      setSaving(false)
-    }
-  }
+    },
+  })
 
-  const handleRemoveDirectly = async (rosterId: string) => {
-    if (!canEdit) return
-    setSaving(true)
-    try {
+  const removeDirectlyMutation = useMutation({
+    mutationFn: async (rosterId: string) => {
+      if (!canEdit) return
       const { error } = await supabase.from("rosters").delete().eq("id", rosterId)
       if (error) throw error
+    },
+    onSuccess: () => {
       setShowMemberSelect(false)
-      await loadMonthData()
-    } catch (err) {
+      invalidateMonth()
+    },
+    onError: (err) => {
       window.alert(err instanceof Error ? err.message : "Erro ao remover da escala.")
-    } finally {
-      setSaving(false)
-    }
-  }
+    },
+  })
 
   return {
     currentMonth,
@@ -286,12 +297,12 @@ export function useDepartmentRosterGrid(departmentId: string | undefined) {
     setShowMemberSelect,
     selectedCell,
     setSelectedCell,
-    saving,
+    saving: addMemberMutation.isPending || removeDirectlyMutation.isPending,
     prevMonth,
     nextMonth,
     getRosterInCell,
     getFilteredMembers,
-    handleAddMember,
-    handleRemoveDirectly,
+    handleAddMember: (memberDbId: string) => addMemberMutation.mutateAsync(memberDbId),
+    handleRemoveDirectly: (rosterId: string) => removeDirectlyMutation.mutateAsync(rosterId),
   }
 }
