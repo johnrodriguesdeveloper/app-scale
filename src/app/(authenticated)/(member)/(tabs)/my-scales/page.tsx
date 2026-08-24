@@ -23,7 +23,7 @@ export default function MyScalesPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-full flex-col items-center justify-center gap-2">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-2">
         <Loader2 className="size-8 animate-spin text-primary" />
         <p className="text-muted-foreground">Carregando...</p>
       </div>

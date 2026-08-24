@@ -12,7 +12,7 @@ export default function ForgotPasswordPage() {
     useForgotPassword()
 
   return (
-    <div className="flex min-h-full flex-col justify-center px-6 py-12">
+    <div className="flex min-h-screen flex-col justify-center px-6 py-12">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
           <div className="mb-4 rounded-full bg-primary p-4 shadow-lg shadow-primary/20">

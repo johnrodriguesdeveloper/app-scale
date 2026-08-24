@@ -97,14 +97,14 @@ export default function MemberListPage({ params }: { params: Promise<{ id: strin
 
   if (loading) {
     return (
-      <div className="flex min-h-full items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     )
   }
 
   return (
-    <div className="relative min-h-full pb-24">
+    <div className="relative min-h-screen pb-24">
       <div className="flex items-center border-b border-border bg-card px-4 py-6">
         <button
           onClick={() => router.push(`/departments/${id}`)}

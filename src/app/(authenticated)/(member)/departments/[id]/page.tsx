@@ -111,14 +111,14 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
 
   if (loading) {
     return (
-      <div className="flex min-h-full items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     )
   }
   if (!department) {
     return (
-      <div className="flex min-h-full items-center justify-center">Não encontrado</div>
+      <div className="flex min-h-screen items-center justify-center">Não encontrado</div>
     )
   }
 

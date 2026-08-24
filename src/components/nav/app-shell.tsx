@@ -9,7 +9,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   return (
-    <div className="min-h-full md:flex">
+    <div className="min-h-screen md:flex">
       <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-border md:p-4">
         <div className="mb-6 px-2 text-lg font-bold">Escala Verbo</div>
         <nav className="flex flex-col gap-1">

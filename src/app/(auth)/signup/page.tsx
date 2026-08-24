@@ -31,7 +31,7 @@ export default function SignupPage() {
   } = useSignup()
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-muted/30 px-4 py-12">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/30 px-4 py-12">
       <div className="w-full max-w-md rounded-lg border bg-card p-8 shadow-2xl shadow-primary/5">
         <div className="mb-8 flex flex-col items-center">
           <div className="mb-5 rounded-full bg-primary p-4 shadow-lg shadow-primary/30">

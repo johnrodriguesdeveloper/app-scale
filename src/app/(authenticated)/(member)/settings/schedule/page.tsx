@@ -57,14 +57,14 @@ export default function SchedulePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-full items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     )
   }
 
   return (
-    <div className="relative min-h-full">
+    <div className="relative min-h-screen">
       <div className="flex items-center border-b border-border bg-card px-4 py-6">
         <button onClick={() => router.back()} className="mr-4 rounded-lg bg-muted p-2">
           <ArrowLeft className="size-5" />
