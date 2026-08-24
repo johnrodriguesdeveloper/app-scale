@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# supabase CLI local cache
+supabase/.temp
+
+# legacy Expo app kept locally for reference only, not part of this deploy
+/legacy-expo/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
