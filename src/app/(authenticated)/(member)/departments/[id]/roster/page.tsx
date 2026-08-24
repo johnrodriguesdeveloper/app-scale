@@ -33,6 +33,7 @@ export default function DepartmentRosterPage({ params }: { params: Promise<{ id:
     loading,
     gridColumns,
     functions,
+    canEdit,
     showMemberSelect,
     setShowMemberSelect,
     selectedCell,
@@ -110,27 +111,39 @@ export default function DepartmentRosterPage({ params }: { params: Promise<{ id:
                         </p>
                       </div>
 
-                      <button
-                        onClick={() => {
-                          setSelectedCell({
-                            functionId: func.id,
-                            functionName: func.name,
-                            serviceId: col.service.id,
-                            date: col.date,
-                            currentRosterId: cellData?.id,
-                          })
-                          setShowMemberSelect(true)
-                        }}
-                        className="flex w-[65%] items-center justify-center bg-white p-1.5 dark:bg-zinc-900"
-                      >
-                        {cellData ? (
-                          <p className="text-center text-[11px] font-bold text-primary">
-                            {cellData.member_name}
-                          </p>
-                        ) : (
-                          <p className="text-center text-[11px] font-bold text-muted-foreground">--</p>
-                        )}
-                      </button>
+                      {canEdit ? (
+                        <button
+                          onClick={() => {
+                            setSelectedCell({
+                              functionId: func.id,
+                              functionName: func.name,
+                              serviceId: col.service.id,
+                              date: col.date,
+                              currentRosterId: cellData?.id,
+                            })
+                            setShowMemberSelect(true)
+                          }}
+                          className="flex w-[65%] items-center justify-center bg-white p-1.5 dark:bg-zinc-900"
+                        >
+                          {cellData ? (
+                            <p className="text-center text-[11px] font-bold text-primary">
+                              {cellData.member_name}
+                            </p>
+                          ) : (
+                            <p className="text-center text-[11px] font-bold text-muted-foreground">--</p>
+                          )}
+                        </button>
+                      ) : (
+                        <div className="flex w-[65%] items-center justify-center bg-white p-1.5 dark:bg-zinc-900">
+                          {cellData ? (
+                            <p className="text-center text-[11px] font-bold text-primary">
+                              {cellData.member_name}
+                            </p>
+                          ) : (
+                            <p className="text-center text-[11px] font-bold text-muted-foreground">--</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })}

@@ -28,7 +28,6 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
     functions,
     isAdmin,
     isMaster,
-    isLeader,
     loading,
     handleBack,
     removeMember,
@@ -145,26 +144,24 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
       </div>
 
       <div className="p-4">
-        {(isAdmin || isMaster || isLeader) && (
-          <div className="mb-6 flex gap-3">
-            {(isAdmin || isMaster) && (
-              <Link
-                href={`/departments/${id}/leaders`}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-warning px-4 py-3 font-bold text-white shadow-sm"
-              >
-                <Shield className="size-5" />
-                Liderança
-              </Link>
-            )}
+        <div className="mb-6 flex gap-3">
+          {(isAdmin || isMaster) && (
             <Link
-              href={`/departments/${id}/roster`}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground shadow-sm"
+              href={`/departments/${id}/leaders`}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-warning px-4 py-3 font-bold text-white shadow-sm"
             >
-              <Calendar className="size-5" />
-              Escala
+              <Shield className="size-5" />
+              Liderança
             </Link>
-          </div>
-        )}
+          )}
+          <Link
+            href={`/departments/${id}/roster`}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground shadow-sm"
+          >
+            <Calendar className="size-5" />
+            Escala
+          </Link>
+        </div>
 
         {(subDepartments.length > 0 || isAdmin) && (
           <div className="mb-6">

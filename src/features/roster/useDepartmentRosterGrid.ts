@@ -48,6 +48,38 @@ export function useDepartmentRosterGrid(departmentId: string | undefined) {
     currentRosterId?: string
   } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [canEdit, setCanEdit] = useState(false)
+
+  useEffect(() => {
+    if (!departmentId) return
+
+    async function checkPermissions() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("org_role")
+        .eq("user_id", user.id)
+        .single()
+
+      const isGlobalAdmin = profile?.org_role === "admin" || profile?.org_role === "master"
+
+      const { data: leaderRecord } = await supabase
+        .from("department_leaders")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("department_id", departmentId!)
+        .maybeSingle()
+
+      setCanEdit(isGlobalAdmin || !!leaderRecord)
+    }
+
+    checkPermissions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [departmentId])
 
   const loadStructure = useCallback(async () => {
     if (!departmentId) return
@@ -204,7 +236,7 @@ export function useDepartmentRosterGrid(departmentId: string | undefined) {
   }
 
   const handleAddMember = async (memberDbId: string) => {
-    if (!selectedCell || !departmentId) return
+    if (!selectedCell || !departmentId || !canEdit) return
     setSaving(true)
     try {
       if (selectedCell.currentRosterId) {
@@ -230,6 +262,7 @@ export function useDepartmentRosterGrid(departmentId: string | undefined) {
   }
 
   const handleRemoveDirectly = async (rosterId: string) => {
+    if (!canEdit) return
     setSaving(true)
     try {
       const { error } = await supabase.from("rosters").delete().eq("id", rosterId)
@@ -248,6 +281,7 @@ export function useDepartmentRosterGrid(departmentId: string | undefined) {
     loading,
     gridColumns,
     functions,
+    canEdit,
     showMemberSelect,
     setShowMemberSelect,
     selectedCell,
