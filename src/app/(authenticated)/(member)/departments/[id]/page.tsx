@@ -146,11 +146,11 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
       </div>
 
       <div className="p-4">
-        <div className="mb-6 flex gap-3">
+        <div className="mb-6 flex flex-wrap gap-3">
           {(isAdmin || isMaster) && (
             <Link
               href={`/departments/${id}/leaders`}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-warning px-4 py-3 font-bold text-white shadow-sm"
+              className="flex min-w-[45%] flex-1 sm:min-w-0 items-center justify-center gap-2 rounded-xl bg-warning px-4 py-3 font-bold text-white shadow-sm"
             >
               <Shield className="size-5" />
               Liderança
@@ -158,7 +158,7 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
           )}
           <Link
             href={`/departments/${id}/roster`}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground shadow-sm"
+            className="flex min-w-[45%] flex-1 sm:min-w-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground shadow-sm"
           >
             <Calendar className="size-5" />
             Escala
@@ -166,7 +166,7 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
           {isLeader && (
             <Link
               href={`/departments/${id}/report`}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-secondary px-4 py-3 font-bold text-secondary-foreground shadow-sm"
+              className="flex min-w-[45%] flex-1 sm:min-w-0 items-center justify-center gap-2 rounded-xl bg-secondary px-4 py-3 font-bold text-secondary-foreground shadow-sm"
             >
               <BarChart3 className="size-5" />
               Relatório
