@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SerwistProvider } from "@serwist/turbopack/react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/query-provider";
 import "./globals.css";
@@ -17,7 +18,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Escala Verbo",
   description: "Gestão de escalas e disponibilidade da equipe",
-  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Escala Verbo",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
@@ -35,14 +43,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body className="min-h-screen flex flex-col">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
-          storageKey="user-theme"
-        >
-          <QueryProvider>{children}</QueryProvider>
-        </ThemeProvider>
+        <SerwistProvider swUrl="/serwist/sw.js">
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem={false}
+            storageKey="user-theme"
+          >
+            <QueryProvider>{children}</QueryProvider>
+          </ThemeProvider>
+        </SerwistProvider>
       </body>
     </html>
   );
