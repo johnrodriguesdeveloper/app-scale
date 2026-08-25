@@ -5,6 +5,8 @@ import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { createClient } from "@/lib/supabase/server"
 import { NotificationShortcut } from "@/components/nav/notification-shortcut"
+import { BirthdayCard } from "@/components/home/birthday-card"
+import type { BirthdayPerson } from "@/types/birthday"
 
 function formatScaleDate(dateString: string) {
   try {
@@ -23,7 +25,7 @@ export default async function HomePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, avatar_url")
+    .select("full_name, avatar_url, organization_id")
     .eq("user_id", user!.id)
     .single()
 
@@ -48,6 +50,39 @@ export default async function HomePage() {
         .limit(1)
         .maybeSingle()
     : { data: null }
+
+  const monthDay = format(new Date(), "MM-dd")
+
+  const { data: orgProfiles } = profile?.organization_id
+    ? await supabase
+        .from("profiles")
+        .select("user_id, full_name, phone, birth_date")
+        .eq("organization_id", profile.organization_id)
+        .not("birth_date", "is", null)
+    : { data: null }
+
+  // birth_date is a Postgres `date` column; PostgREST's LIKE doesn't support it, so match month/day in JS.
+  const birthdayProfiles = (orgProfiles ?? []).filter((p) => p.birth_date?.slice(5) === monthDay)
+
+  const birthdayUserIds = (birthdayProfiles ?? []).map((p) => p.user_id)
+
+  const { data: birthdayMemberships } = birthdayUserIds.length
+    ? await supabase.from("department_members").select("user_id, departments(name)").in("user_id", birthdayUserIds)
+    : { data: null }
+
+  const departmentByUserId = new Map<string, string>()
+  for (const membership of birthdayMemberships ?? []) {
+    if (!departmentByUserId.has(membership.user_id) && membership.departments?.name) {
+      departmentByUserId.set(membership.user_id, membership.departments.name)
+    }
+  }
+
+  const birthdayPeople: BirthdayPerson[] = (birthdayProfiles ?? []).map((p) => ({
+    user_id: p.user_id,
+    full_name: p.full_name || "Membro",
+    phone: p.phone,
+    department_name: departmentByUserId.get(p.user_id) ?? null,
+  }))
 
   return (
     <div className="pb-10">
@@ -75,6 +110,8 @@ export default async function HomePage() {
       </div>
 
       <div className="flex flex-col gap-4 px-6">
+        <BirthdayCard people={birthdayPeople} />
+
         <Link
           href="/my-scales"
           className="flex items-center rounded-3xl border border-border bg-card p-5 shadow-sm transition-colors hover:bg-muted/50"
