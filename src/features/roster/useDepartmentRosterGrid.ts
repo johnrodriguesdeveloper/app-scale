@@ -12,6 +12,7 @@ import {
   subMonths,
 } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
+import { isLeaderOfDepartmentChain } from "@/features/departments/departmentLeadership"
 import type { DepartmentFunction } from "@/types/department"
 import type { ServiceDay } from "@/types/schedule"
 import type {
@@ -73,15 +74,9 @@ async function fetchRosterCanEdit(
     .single()
 
   const isGlobalAdmin = profile?.org_role === "admin" || profile?.org_role === "master"
+  if (isGlobalAdmin) return true
 
-  const { data: leaderRecord } = await supabase
-    .from("department_leaders")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("department_id", departmentId)
-    .maybeSingle()
-
-  return isGlobalAdmin || !!leaderRecord
+  return isLeaderOfDepartmentChain(supabase, user.id, departmentId)
 }
 
 async function fetchRosterMonthData(

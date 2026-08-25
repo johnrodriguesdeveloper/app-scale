@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
+import { isLeaderOfDepartmentChain } from "@/features/departments/departmentLeadership"
 import type { Department, DepartmentFunction, DepartmentMember } from "@/types/department"
 
 interface DepartmentDetailsData {
@@ -36,14 +37,8 @@ async function fetchDepartmentDetails(
   } = await supabase.auth.getUser()
   if (!user) return empty
 
-  const [profileRes, leaderRes, deptRes, membersRes, subDeptsRes, functionsRes] = await Promise.all([
+  const [profileRes, deptRes, membersRes, subDeptsRes, functionsRes] = await Promise.all([
     supabase.from("profiles").select("org_role").eq("user_id", user.id).single(),
-    supabase
-      .from("department_leaders")
-      .select("id")
-      .eq("department_id", id)
-      .eq("user_id", user.id)
-      .maybeSingle(),
     supabase
       .from("departments")
       .select("id, name, description, priority_order, availability_deadline_day, parent_id, organization_id")
@@ -69,6 +64,7 @@ async function fetchDepartmentDetails(
 
   const masterStatus = profileRes.data?.org_role === "master"
   const isAdmin = profileRes.data?.org_role === "admin" || masterStatus
+  const isLeader = isAdmin ? true : await isLeaderOfDepartmentChain(supabase, user.id, id)
 
   let parentDepartment: Department | null = null
   if (deptRes.data?.parent_id) {
@@ -88,7 +84,7 @@ async function fetchDepartmentDetails(
     functions: functionsRes.data || [],
     isAdmin,
     isMaster: masterStatus,
-    isLeader: !!leaderRes.data,
+    isLeader,
   }
 }
 

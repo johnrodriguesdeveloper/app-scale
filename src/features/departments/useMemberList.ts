@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
+import { isLeaderOfDepartmentChain } from "@/features/departments/departmentLeadership"
 import type { DepartmentFunction, DepartmentMember, Profile } from "@/types/department"
 
 interface MemberListData {
@@ -19,17 +20,9 @@ async function fetchMemberListData(
     data: { user },
   } = await supabase.auth.getUser()
 
-  const [profileRes, leaderRecordRes, leadersRes, membersRes, functionsRes] = await Promise.all([
+  const [profileRes, leadersRes, membersRes, functionsRes] = await Promise.all([
     user
       ? supabase.from("profiles").select("org_role").eq("user_id", user.id).single()
-      : Promise.resolve({ data: null }),
-    user
-      ? supabase
-          .from("department_leaders")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("department_id", departmentId)
-          .maybeSingle()
       : Promise.resolve({ data: null }),
     supabase.from("department_leaders").select("user_id").eq("department_id", departmentId),
     supabase
@@ -42,6 +35,7 @@ async function fetchMemberListData(
   ])
 
   const isGlobalAdmin = profileRes.data?.org_role === "admin" || profileRes.data?.org_role === "master"
+  const isLeader = user && !isGlobalAdmin ? await isLeaderOfDepartmentChain(supabase, user.id, departmentId) : false
   const leaderIds = leadersRes.data?.map((l) => l.user_id) || []
 
   const members = ((membersRes.data as unknown as DepartmentMember[]) || []).sort((a, b) => {
@@ -56,7 +50,7 @@ async function fetchMemberListData(
     members,
     departmentLeaders: leaderIds,
     availableFunctions: functionsRes.data || [],
-    canEdit: isGlobalAdmin || !!leaderRecordRes.data,
+    canEdit: isGlobalAdmin || isLeader,
   }
 }
 
