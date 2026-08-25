@@ -1,14 +1,10 @@
 alter table push_subscriptions
   add constraint push_subscriptions_endpoint_key unique (endpoint);
 
-alter table push_subscriptions enable row level security;
-
-drop policy if exists "Users can manage their own push subscriptions" on push_subscriptions;
-create policy "Users can manage their own push subscriptions"
-  on push_subscriptions
-  for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+-- RLS was already enabled with an equivalent pre-existing policy
+-- ("Usuários podem gerenciar suas próprias assinaturas", auth.uid() = user_id,
+-- for all) — confirmed against the live database, so no new policy is added
+-- here to avoid a redundant duplicate.
 
 create table if not exists notification_log (
   id uuid primary key default gen_random_uuid(),
