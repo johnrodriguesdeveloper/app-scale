@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { navItems } from "./nav-items"
+import { InstallAppButton } from "./install-app-button"
 import { cn } from "@/lib/utils"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -33,7 +34,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )
           })}
         </nav>
+        <InstallAppButton className="mt-auto w-full" />
       </aside>
+
+      <InstallAppButton className="fixed right-4 bottom-24 z-30 shadow-md md:hidden" />
 
       <main className="flex-1 pb-20 md:pb-0">{children}</main>
 
