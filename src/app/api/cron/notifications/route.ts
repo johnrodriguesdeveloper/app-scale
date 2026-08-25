@@ -95,61 +95,84 @@ async function buildDeadlineReminders(
   }))
 }
 
+async function sendOne(subscription: Database["public"]["Tables"]["push_subscriptions"]["Row"], payload: string) {
+  try {
+    await Promise.race([
+      webpush.sendNotification(
+        {
+          endpoint: subscription.endpoint,
+          keys: { p256dh: subscription.p256dh, auth: subscription.auth },
+        },
+        payload
+      ),
+      new Promise((_resolve, reject) =>
+        setTimeout(() => reject(new Error("web-push send timed out")), 10_000)
+      ),
+    ])
+    return null
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode
+    return statusCode === 404 || statusCode === 410 ? subscription.id : null
+  }
+}
+
 async function sendAndLog(
   supabase: ReturnType<typeof createServiceRoleClient>,
   notifications: PendingNotification[]
 ) {
-  let sent = 0
+  if (notifications.length === 0) return 0
 
-  for (const notification of notifications) {
-    const { data: existing } = await supabase
-      .from("notification_log")
-      .select("id")
-      .eq("user_id", notification.userId)
-      .eq("type", notification.type)
-      .eq("target_date", notification.targetDate)
-      .maybeSingle()
+  const userIds = Array.from(new Set(notifications.map((n) => n.userId)))
 
-    if (existing) continue
+  const { data: existingLogs } = await supabase
+    .from("notification_log")
+    .select("user_id, type, target_date")
+    .in("user_id", userIds)
 
-    const { data: subscriptions } = await supabase
-      .from("push_subscriptions")
-      .select("*")
-      .eq("user_id", notification.userId)
+  const alreadySent = new Set(
+    (existingLogs ?? []).map((log) => `${log.user_id}:${log.type}:${log.target_date}`)
+  )
+  const pending = notifications.filter((n) => !alreadySent.has(`${n.userId}:${n.type}:${n.targetDate}`))
+  if (pending.length === 0) return 0
 
-    const payload = JSON.stringify({
-      title: notification.title,
-      body: notification.body,
-      url: notification.url,
-    })
+  const pendingUserIds = Array.from(new Set(pending.map((n) => n.userId)))
+  const { data: subscriptions } = await supabase
+    .from("push_subscriptions")
+    .select("*")
+    .in("user_id", pendingUserIds)
 
-    for (const subscription of subscriptions ?? []) {
-      try {
-        await webpush.sendNotification(
-          {
-            endpoint: subscription.endpoint,
-            keys: { p256dh: subscription.p256dh, auth: subscription.auth },
-          },
-          payload
-        )
-      } catch (error) {
-        const statusCode = (error as { statusCode?: number }).statusCode
-        if (statusCode === 404 || statusCode === 410) {
-          await supabase.from("push_subscriptions").delete().eq("id", subscription.id)
-        }
-      }
-    }
-
-    await supabase.from("notification_log").insert({
-      user_id: notification.userId,
-      type: notification.type,
-      target_date: notification.targetDate,
-    })
-    sent += 1
+  const subscriptionsByUser = new Map<string, typeof subscriptions>()
+  for (const subscription of subscriptions ?? []) {
+    const list = subscriptionsByUser.get(subscription.user_id) ?? []
+    list.push(subscription)
+    subscriptionsByUser.set(subscription.user_id, list)
   }
 
-  return sent
+  const results = await Promise.all(
+    pending.map((notification) => {
+      const payload = JSON.stringify({
+        title: notification.title,
+        body: notification.body,
+        url: notification.url,
+      })
+      const userSubscriptions = subscriptionsByUser.get(notification.userId) ?? []
+      return Promise.all(userSubscriptions.map((subscription) => sendOne(subscription, payload)))
+    })
+  )
+
+  const expiredIds = results.flat().filter((id): id is string => id !== null)
+  if (expiredIds.length > 0) {
+    await supabase.from("push_subscriptions").delete().in("id", expiredIds)
+  }
+
+  await supabase.from("notification_log").insert(
+    pending.map((n) => ({ user_id: n.userId, type: n.type, target_date: n.targetDate }))
+  )
+
+  return pending.length
 }
+
+export const maxDuration = 60
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization")
