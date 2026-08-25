@@ -4,6 +4,7 @@ import { Calendar, ChevronRight, Clock, MapPin, User } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { createClient } from "@/lib/supabase/server"
+import { NotificationShortcut } from "@/components/nav/notification-shortcut"
 
 function formatScaleDate(dateString: string) {
   try {
@@ -129,6 +130,8 @@ export default async function HomePage() {
           </div>
           <ChevronRight className="size-5 text-muted-foreground" />
         </Link>
+
+        <NotificationShortcut />
       </div>
     </div>
   )
