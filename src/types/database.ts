@@ -384,6 +384,30 @@ export type Database = {
           },
         ]
       }
+      notification_log: {
+        Row: {
+          id: string
+          sent_at: string | null
+          target_date: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          sent_at?: string | null
+          target_date: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          sent_at?: string | null
+          target_date?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       organizations: {
         Row: {
           created_at: string | null
