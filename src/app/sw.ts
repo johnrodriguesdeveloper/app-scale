@@ -55,4 +55,20 @@ serwist.registerCapture(
   }),
 );
 
+self.addEventListener("push", (event) => {
+  const data = event.data?.json() as { title?: string; body?: string; url?: string } | undefined;
+  event.waitUntil(
+    self.registration.showNotification(data?.title ?? "Escala Verbo", {
+      body: data?.body,
+      icon: "/icons/icon-192.png",
+      data: { url: data?.url ?? "/" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.openWindow(event.notification.data.url));
+});
+
 serwist.addEventListeners();
