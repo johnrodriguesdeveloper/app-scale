@@ -4,6 +4,7 @@ import { use, useState } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
+  BarChart3,
   Briefcase,
   Calendar,
   Folder,
@@ -28,6 +29,7 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
     functions,
     isAdmin,
     isMaster,
+    isLeader,
     loading,
     handleBack,
     removeMember,
@@ -161,6 +163,15 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
             <Calendar className="size-5" />
             Escala
           </Link>
+          {isLeader && (
+            <Link
+              href={`/departments/${id}/report`}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-secondary px-4 py-3 font-bold text-secondary-foreground shadow-sm"
+            >
+              <BarChart3 className="size-5" />
+              Relatório
+            </Link>
+          )}
         </div>
 
         {(subDepartments.length > 0 || isAdmin) && (

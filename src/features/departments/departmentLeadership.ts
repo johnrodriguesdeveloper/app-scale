@@ -25,6 +25,24 @@ async function getDepartmentAncestorIds(
   return ids
 }
 
+export async function getDepartmentSubtreeIds(
+  supabase: ReturnType<typeof createClient>,
+  rootId: string
+): Promise<string[]> {
+  const ids = [rootId]
+  let frontier = [rootId]
+
+  for (let depth = 0; depth < 20 && frontier.length > 0; depth++) {
+    const { data } = await supabase.from("departments").select("id").in("parent_id", frontier)
+    const children = (data ?? []).map((d) => d.id as string)
+    if (children.length === 0) break
+    ids.push(...children)
+    frontier = children
+  }
+
+  return ids
+}
+
 export async function isLeaderOfDepartmentChain(
   supabase: ReturnType<typeof createClient>,
   userId: string,
