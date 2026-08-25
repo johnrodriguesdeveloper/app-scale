@@ -1,13 +1,15 @@
 "use client"
 
 import Link from "next/link"
-import { ChevronRight, LogOut, Moon, Sun, User } from "lucide-react"
+import { Bell, ChevronRight, LogOut, Moon, Sun, User } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { useSettings } from "@/features/settings/useSettings"
+import { usePushSubscription } from "@/features/pwa/usePushSubscription"
 import { cn } from "@/lib/utils"
 
 export default function SettingsPage() {
   const { isDark, handleToggleTheme, handleSignOut, openPortfolio } = useSettings()
+  const { isSupported, isSubscribed, loading, subscribe, unsubscribe } = usePushSubscription()
 
   return (
     <div>
@@ -42,6 +44,34 @@ export default function SettingsPage() {
             <Switch checked={isDark} onCheckedChange={handleToggleTheme} />
           </div>
         </div>
+
+        {isSupported && (
+          <>
+            <p className="mb-3 mt-8 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Notificações
+            </p>
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
+                    <Bell className="size-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold">Lembretes</p>
+                    <p className="text-xs text-muted-foreground">
+                      Escalas e prazo de disponibilidade
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={isSubscribed}
+                  disabled={loading}
+                  onCheckedChange={(checked) => (checked ? subscribe() : unsubscribe())}
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         <p className="mb-3 mt-8 text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Conta
