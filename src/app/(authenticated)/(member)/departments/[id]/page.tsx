@@ -17,6 +17,7 @@ import {
 import { useDepartmentDetails } from "@/features/departments/useDepartmentDetails"
 import { ConfirmModal } from "@/components/ConfirmModal"
 import { PromptModal } from "@/components/PromptModal"
+import { MemberAvatar } from "@/components/MemberAvatar"
 import { shortName } from "@/lib/utils"
 
 export default function DepartmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -268,11 +269,12 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                        <span className="font-semibold text-primary">
-                          {member.profiles?.full_name?.charAt(0).toUpperCase() || "U"}
-                        </span>
-                      </div>
+                      <MemberAvatar
+                        avatarUrl={member.profiles?.avatar_url}
+                        name={member.profiles?.full_name}
+                        className="size-10 shrink-0"
+                        fallbackClassName="bg-primary/10 text-primary font-semibold"
+                      />
                       <div className="mr-2 min-w-0 flex-1">
                         <p className="truncate font-medium">
                           {shortName(member.profiles?.full_name) || "Sem nome"}
