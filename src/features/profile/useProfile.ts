@@ -90,6 +90,10 @@ export function useProfile() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (!editingName.trim()) {
+        throw new Error("O nome não pode ficar em branco.")
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser()

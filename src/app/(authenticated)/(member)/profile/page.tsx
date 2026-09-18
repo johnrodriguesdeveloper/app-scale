@@ -86,7 +86,12 @@ export default function ProfilePage() {
               <label className="mb-2 block text-sm font-medium text-muted-foreground">
                 Nome Completo
               </label>
-              <IconInput icon={User} value={editingName} onChange={(e) => setEditingName(e.target.value)} />
+              <IconInput
+                icon={User}
+                value={editingName}
+                onChange={(e) => setEditingName(e.target.value)}
+                required
+              />
             </div>
 
             <div>

@@ -266,13 +266,13 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
                   className={index !== members.length - 1 ? "border-b border-border p-4" : "p-4"}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex flex-1 items-center gap-3">
-                      <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
                         <span className="font-semibold text-primary">
                           {member.profiles?.full_name?.charAt(0).toUpperCase() || "U"}
                         </span>
                       </div>
-                      <div className="mr-2 flex-1">
+                      <div className="mr-2 min-w-0 flex-1">
                         <p className="truncate font-medium">{member.profiles?.full_name || "Sem nome"}</p>
                         <p className="text-sm text-muted-foreground">
                           {member.dept_role === "leader" ? "Líder" : "Membro"}
