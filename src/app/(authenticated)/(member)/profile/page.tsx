@@ -1,18 +1,21 @@
 "use client"
 
+import { useRef } from "react"
 import { useRouter } from "next/navigation"
-import Image from "next/image"
-import { ArrowLeft, Calendar, Loader2, LogOut, Phone, User } from "lucide-react"
+import { ArrowLeft, Calendar, Camera, Loader2, LogOut, Phone, User } from "lucide-react"
 import { IconInput } from "@/components/form/icon-input"
 import { FeedbackModal } from "@/components/FeedbackModal"
+import { MemberAvatar } from "@/components/MemberAvatar"
 import { useProfile } from "@/features/profile/useProfile"
 
 export default function ProfilePage() {
   const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const {
     profile,
     loading,
     saving,
+    uploadingAvatar,
     editingName,
     setEditingName,
     editingPhone,
@@ -21,8 +24,8 @@ export default function ProfilePage() {
     handleDateChange,
     handlePhoneChange,
     handleSaveProfile,
+    handleAvatarChange,
     handleLogout,
-    getInitials,
     closeModal,
   } = useProfile()
 
@@ -50,26 +53,38 @@ export default function ProfilePage() {
 
       <div className="mx-auto max-w-lg p-6">
         <div className="mb-8 flex flex-col items-center">
-          <div className="opacity-80">
-            {profile?.avatar_url ? (
-              <Image
-                src={profile.avatar_url}
-                alt={profile.full_name || "Avatar"}
-                width={96}
-                height={96}
-                className="size-24 rounded-full border-4 border-background object-cover"
-              />
-            ) : (
-              <div className="flex size-24 items-center justify-center rounded-full border-4 border-background bg-muted">
-                <span className="text-2xl font-bold text-muted-foreground">
-                  {profile?.full_name ? getInitials(profile.full_name) : "U"}
-                </span>
-              </div>
-            )}
+          <div className="relative">
+            <MemberAvatar
+              avatarUrl={profile?.avatar_url}
+              name={profile?.full_name}
+              className="size-24 border-4 border-background"
+              fallbackClassName="text-2xl font-bold"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="absolute bottom-0 right-0 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm disabled:opacity-50"
+              aria-label="Trocar foto de perfil"
+            >
+              {uploadingAvatar ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Camera className="size-4" />
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleAvatarChange(file)
+                e.target.value = ""
+              }}
+            />
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            (Alteração de foto temporariamente indisponível)
-          </p>
         </div>
 
         <div className="mb-8 rounded-xl border border-border bg-card p-4">

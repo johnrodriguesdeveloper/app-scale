@@ -10,12 +10,6 @@ import {
 } from "@/features/notifications/notificationSchedule"
 import type { Database } from "@/types/database"
 
-webpush.setVapidDetails(
-  "mailto:contato@escalaverbo.app",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-)
-
 type NotificationType = Database["public"]["Tables"]["notification_log"]["Row"]["type"]
 
 interface PendingNotification {
@@ -180,6 +174,12 @@ export async function GET(request: NextRequest) {
   if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return new NextResponse("Unauthorized", { status: 401 })
   }
+
+  webpush.setVapidDetails(
+    "mailto:contato@escalaverbo.app",
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!
+  )
 
   const supabase = createServiceRoleClient()
   const today = getToday(request)

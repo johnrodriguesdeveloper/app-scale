@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Plus, ShieldCheck, Trash } from "lucide-react"
 import { useMemberList } from "@/features/departments/useMemberList"
 import { ConfirmModal } from "@/components/ConfirmModal"
 import { AddMemberModal } from "@/features/departments/AddMemberModal"
+import { MemberAvatar } from "@/components/MemberAvatar"
 import type { DepartmentMember } from "@/types/department"
 
 export default function MemberListPage({ params }: { params: Promise<{ id: string }> }) {
@@ -131,11 +132,12 @@ export default function MemberListPage({ params }: { params: Promise<{ id: strin
             >
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex flex-1 items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
-                    <span className="font-bold text-primary">
-                      {member.profiles.full_name?.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
+                  <MemberAvatar
+                    avatarUrl={member.profiles.avatar_url}
+                    name={member.profiles.full_name}
+                    className="size-10 shrink-0"
+                    fallbackClassName="bg-primary/10 text-primary font-bold"
+                  />
                   <div>
                     <p className="text-base font-bold">{member.profiles?.full_name}</p>
                     {isLeader && (

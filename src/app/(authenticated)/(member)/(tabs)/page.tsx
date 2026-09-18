@@ -1,11 +1,11 @@
 import Link from "next/link"
-import Image from "next/image"
-import { Calendar, ChevronRight, Clock, MapPin, User } from "lucide-react"
+import { Calendar, ChevronRight, Clock, MapPin } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { createClient } from "@/lib/supabase/server"
 import { NotificationShortcut } from "@/components/nav/notification-shortcut"
 import { BirthdayCard } from "@/components/home/birthday-card"
+import { MemberAvatar } from "@/components/MemberAvatar"
 import type { BirthdayPerson } from "@/types/birthday"
 
 function formatScaleDate(dateString: string) {
@@ -93,19 +93,7 @@ export default async function HomePage() {
         </div>
 
         <Link href="/profile" className="rounded-full shadow-sm">
-          {avatarUrl ? (
-            <Image
-              src={avatarUrl}
-              alt={userName}
-              width={48}
-              height={48}
-              className="size-12 rounded-full border border-border object-cover"
-            />
-          ) : (
-            <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-              <User className="size-6 text-muted-foreground" />
-            </div>
-          )}
+          <MemberAvatar avatarUrl={avatarUrl} name={userName} className="size-12 border border-border" />
         </Link>
       </div>
 

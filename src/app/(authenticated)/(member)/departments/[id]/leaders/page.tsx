@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { ArrowLeft, Loader2, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react"
 import { useDepartmentLeaders } from "@/features/departments/useDepartmentLeaders"
 import { ConfirmModal } from "@/components/ConfirmModal"
+import { MemberAvatar } from "@/components/MemberAvatar"
 import { Input } from "@/components/ui/input"
 
 export default function DepartmentLeadersPage({ params }: { params: Promise<{ id: string }> }) {
@@ -67,11 +68,12 @@ export default function DepartmentLeadersPage({ params }: { params: Promise<{ id
                   onClick={() => handleAddLeader(user.id)}
                   className="flex items-center gap-3 rounded-lg bg-muted p-3 text-left"
                 >
-                  <div className="flex size-10 items-center justify-center rounded-full bg-primary">
-                    <span className="font-bold text-primary-foreground">
-                      {user.full_name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
+                  <MemberAvatar
+                    avatarUrl={user.avatar_url}
+                    name={user.full_name}
+                    className="size-10 shrink-0"
+                    fallbackClassName="bg-primary text-primary-foreground font-bold"
+                  />
                   <div className="flex-1">
                     <p className="font-medium">{user.full_name}</p>
                     {user.email && <p className="text-sm text-muted-foreground">{user.email}</p>}
@@ -101,9 +103,13 @@ export default function DepartmentLeadersPage({ params }: { params: Promise<{ id
               >
                 <div className="flex items-center justify-between">
                   <div className="flex flex-1 items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-warning">
-                      <ShieldCheck className="size-4 text-white" />
-                    </div>
+                    <MemberAvatar
+                      avatarUrl={leader.profiles.avatar_url}
+                      name={leader.profiles.full_name}
+                      className="size-10 shrink-0"
+                      fallbackClassName="bg-warning text-white"
+                      badge={<ShieldCheck className="text-white" />}
+                    />
                     <div className="flex-1">
                       <p className="font-semibold">{leader.profiles.full_name}</p>
                       {leader.profiles.email && (
