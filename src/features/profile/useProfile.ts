@@ -6,6 +6,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import type { FeedbackModalProps } from "@/types/ui"
 import type { UserProfile } from "@/types/profile"
+import { resizeImage } from "@/lib/image"
+
+const AVATAR_MAX_BYTES = 8 * 1024 * 1024
+const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
 const queryKey = ["profile"]
 
@@ -129,25 +133,64 @@ export function useProfile() {
     },
   })
 
+  const uploadAvatarMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
+        throw new Error("Envie uma imagem JPEG, PNG ou WebP.")
+      }
+      if (file.size > AVATAR_MAX_BYTES) {
+        throw new Error("A imagem deve ter no máximo 8MB.")
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+
+      const resized = await resizeImage(file)
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(`${user.id}/avatar.jpg`, resized, {
+          contentType: "image/jpeg",
+          upsert: true,
+        })
+      if (uploadError) throw uploadError
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("avatars").getPublicUrl(`${user.id}/avatar.jpg`)
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: `${publicUrl}?v=${Date.now()}` })
+        .eq("user_id", user.id)
+
+      if (updateError) throw updateError
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey })
+    },
+    onError: (error) => {
+      showModal(
+        "error",
+        "Erro",
+        error instanceof Error ? error.message : "Falha ao atualizar a foto de perfil."
+      )
+    },
+  })
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.replace("/login")
     router.refresh()
   }
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2)
-  }
-
   return {
     profile,
     loading,
     saving: saveMutation.isPending,
+    uploadingAvatar: uploadAvatarMutation.isPending,
     editingName,
     setEditingName,
     editingPhone,
@@ -156,8 +199,8 @@ export function useProfile() {
     handleDateChange,
     handlePhoneChange,
     handleSaveProfile: () => saveMutation.mutateAsync(),
+    handleAvatarChange: (file: File) => uploadAvatarMutation.mutateAsync(file),
     handleLogout,
-    getInitials,
     closeModal,
   }
 }
