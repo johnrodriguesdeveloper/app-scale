@@ -1,7 +1,11 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
-const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/update-password"]
+const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/update-password", "/auth/confirm"]
+// A recovery link establishes a session on the way to /update-password, and an
+// already-authenticated user should still be able to reach these two routes
+// instead of being bounced home like the other public routes.
+const ROUTES_ALLOWED_WHEN_LOGGED_IN = ["/update-password", "/auth/confirm"]
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -31,6 +35,9 @@ export async function proxy(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route))
+  const isAllowedWhenLoggedIn = ROUTES_ALLOWED_WHEN_LOGGED_IN.some((route) =>
+    pathname.startsWith(route)
+  )
 
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
@@ -38,7 +45,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (user && isPublicRoute) {
+  if (user && isPublicRoute && !isAllowedWhenLoggedIn) {
     const url = request.nextUrl.clone()
     url.pathname = "/"
     return NextResponse.redirect(url)

@@ -28,20 +28,6 @@ export function useUpdatePassword() {
 
   useEffect(() => {
     const checkSession = async () => {
-      if (typeof window !== "undefined" && window.location.hash) {
-        const hash = window.location.hash.substring(1)
-        const params = new URLSearchParams(hash)
-        const accessToken = params.get("access_token")
-        const refreshToken = params.get("refresh_token")
-
-        if (accessToken && refreshToken) {
-          await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          })
-        }
-      }
-
       const {
         data: { session },
       } = await supabase.auth.getSession()
@@ -51,8 +37,7 @@ export function useUpdatePassword() {
       }
     }
 
-    const timeout = setTimeout(checkSession, 500)
-    return () => clearTimeout(timeout)
+    checkSession()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
