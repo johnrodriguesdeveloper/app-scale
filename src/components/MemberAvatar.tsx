@@ -16,7 +16,7 @@ export function MemberAvatar({ avatarUrl, name, className, fallbackClassName, ba
   return (
     <Avatar className={cn("size-10", className)}>
       {avatarUrl && <AvatarImage src={avatarUrl} alt={name || "Avatar"} />}
-      <AvatarFallback delayMs={200} className={fallbackClassName}>
+      <AvatarFallback delayMs={avatarUrl ? 200 : undefined} className={fallbackClassName}>
         {initial}
       </AvatarFallback>
       {badge && <AvatarBadge>{badge}</AvatarBadge>}
