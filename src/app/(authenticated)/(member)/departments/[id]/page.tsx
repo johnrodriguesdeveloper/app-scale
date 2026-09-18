@@ -17,6 +17,7 @@ import {
 import { useDepartmentDetails } from "@/features/departments/useDepartmentDetails"
 import { ConfirmModal } from "@/components/ConfirmModal"
 import { PromptModal } from "@/components/PromptModal"
+import { shortName } from "@/lib/utils"
 
 export default function DepartmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -273,7 +274,9 @@ export default function DepartmentDetailPage({ params }: { params: Promise<{ id:
                         </span>
                       </div>
                       <div className="mr-2 min-w-0 flex-1">
-                        <p className="truncate font-medium">{member.profiles?.full_name || "Sem nome"}</p>
+                        <p className="truncate font-medium">
+                          {shortName(member.profiles?.full_name) || "Sem nome"}
+                        </p>
                         <p className="text-sm text-muted-foreground">
                           {member.dept_role === "leader" ? "Líder" : "Membro"}
                         </p>
