@@ -58,3 +58,12 @@ begin
       );
   end if;
 end $$;
+
+-- The live project still had the default Supabase avatar template policies
+-- (note the trailing periods). "Anyone can upload an avatar." let any user
+-- write into any folder of the bucket, and policies are OR-ed, so it would
+-- override the per-user insert check above. Drop them now that the scoped
+-- replacements exist.
+drop policy if exists "Anyone can upload an avatar." on storage.objects;
+drop policy if exists "Avatar images are publicly accessible." on storage.objects;
+drop policy if exists "Users can update their own avatar." on storage.objects;
