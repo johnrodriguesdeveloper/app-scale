@@ -17,6 +17,11 @@ const SORT_OPTIONS: { mode: SortMode; label: string }[] = [
   { mode: "available", label: "Mais disponíveis" },
 ]
 
+// Case- and accent-insensitive, so "sabado" finds "sábado".
+function normalizeSearch(text: string) {
+  return text.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+}
+
 export default function DepartmentReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: departmentId } = use(params)
   const router = useRouter()
@@ -75,8 +80,41 @@ export default function DepartmentReportPage({ params }: { params: Promise<{ id:
   const selectedMember = selectedMonth
     ? displayedRows.find((row) => row.userId === selectedMemberId) ?? null
     : null
-  const dailyAvailability =
-    selectedMember && selectedMonth ? getDailyAvailabilityForMember(selectedMember.userId, selectedMonth.key) : []
+  const dailyAvailability = useMemo(
+    () =>
+      selectedMember && selectedMonth
+        ? getDailyAvailabilityForMember(selectedMember.userId, selectedMonth.key)
+        : [],
+    [selectedMember, selectedMonth, getDailyAvailabilityForMember]
+  )
+
+  const [daySearchText, setDaySearchText] = useState("")
+
+  const displayedDailyAvailability = useMemo(() => {
+    const search = normalizeSearch(daySearchText)
+    if (!search) return dailyAvailability
+
+    // A bare number means a day of the month, so "1" doesn't also match 10-19.
+    if (/^\d{1,2}$/.test(search)) {
+      return dailyAvailability.filter((item) => item.date.getDate() === Number(search))
+    }
+
+    return dailyAvailability.filter((item) =>
+      normalizeSearch(
+        [
+          format(item.date, "dd/MM"),
+          format(item.date, "d/M"),
+          format(item.date, "EEEE", { locale: ptBR }),
+          item.service.name,
+        ].join(" ")
+      ).includes(search)
+    )
+  }, [dailyAvailability, daySearchText])
+
+  const closeMember = () => {
+    setSelectedMemberId(null)
+    setDaySearchText("")
+  }
 
   if (loading) {
     return (
@@ -112,10 +150,10 @@ export default function DepartmentReportPage({ params }: { params: Promise<{ id:
         <button
           onClick={() => {
             if (selectedMemberId) {
-              setSelectedMemberId(null)
+              closeMember()
             } else if (selectedMonth) {
               setSelectedMonthKey(null)
-              setSelectedMemberId(null)
+              closeMember()
             } else {
               router.push(`/departments/${departmentId}`)
             }
@@ -145,8 +183,17 @@ export default function DepartmentReportPage({ params }: { params: Promise<{ id:
               {selectedMember.timesAvailable}/{selectedMember.servicesInMonth} disponível ·{" "}
               {selectedMember.timesScheduled}/{selectedMember.servicesInMonth} escalado
             </p>
+            <div className="mb-4 flex items-center gap-2 rounded-xl bg-muted p-3">
+              <Search className="size-5 text-muted-foreground" />
+              <input
+                value={daySearchText}
+                onChange={(e) => setDaySearchText(e.target.value)}
+                placeholder="Buscar por dia (ex: 15, 15/10, domingo)..."
+                className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              />
+            </div>
             <div className="pb-4">
-              {dailyAvailability.map((item) => (
+              {displayedDailyAvailability.map((item) => (
                 <div
                   key={item.key}
                   className={cn(
@@ -185,8 +232,12 @@ export default function DepartmentReportPage({ params }: { params: Promise<{ id:
                   </div>
                 </div>
               ))}
-              {dailyAvailability.length === 0 && (
+              {dailyAvailability.length === 0 ? (
                 <p className="mt-4 text-center text-muted-foreground">Nenhum evento neste mês.</p>
+              ) : (
+                displayedDailyAvailability.length === 0 && (
+                  <p className="mt-4 text-center text-muted-foreground">Nenhum dia encontrado.</p>
+                )
               )}
             </div>
           </div>
