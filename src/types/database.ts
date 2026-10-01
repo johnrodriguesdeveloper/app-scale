@@ -139,6 +139,51 @@ export type Database = {
           },
         ]
       }
+      availability_routine_history: {
+        Row: {
+          created_at: string
+          id: number
+          is_available: boolean | null
+          is_deleted: boolean
+          service_day_id: string
+          user_id: string
+          valid_from: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          is_available?: boolean | null
+          is_deleted?: boolean
+          service_day_id: string
+          user_id: string
+          valid_from?: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          is_available?: boolean | null
+          is_deleted?: boolean
+          service_day_id?: string
+          user_id?: string
+          valid_from?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "availability_routine_history_service_day_id_fkey"
+            columns: ["service_day_id"]
+            isOneToOne: false
+            referencedRelation: "service_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_routine_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       department_functions: {
         Row: {
           created_at: string | null

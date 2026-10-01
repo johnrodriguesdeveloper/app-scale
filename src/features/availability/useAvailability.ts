@@ -15,8 +15,14 @@ import {
 } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import { buildMonthAvailability } from "@/features/availability/buildMonthAvailability"
+import { fetchRoutineHistory, getRoutineForMonth } from "@/features/availability/routineHistory"
 import { getTargetMonthDate } from "@/utils/getTargetMonthDate"
-import type { AvailabilityException, AvailabilityRoutine, ExpandedCalendarItem } from "@/types/availability"
+import type {
+  AvailabilityException,
+  AvailabilityRoutine,
+  AvailabilityRoutineHistoryEntry,
+  ExpandedCalendarItem,
+} from "@/types/availability"
 import type { ServiceDay } from "@/types/schedule"
 
 export const fullDayNames = [
@@ -75,6 +81,16 @@ async function fetchMonthExceptions(
   return (data as AvailabilityException[]) || []
 }
 
+async function fetchOwnRoutineHistory(
+  supabase: ReturnType<typeof createClient>
+): Promise<AvailabilityRoutineHistoryEntry[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return []
+  return fetchRoutineHistory(supabase, [user.id])
+}
+
 export function useAvailability() {
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -84,12 +100,25 @@ export function useAvailability() {
   const [saving, setSaving] = useState<{ [key: string]: boolean }>({})
 
   const routineKey = ["availability-routine"]
+  const historyKey = ["availability-routine-history"]
   const monthKey = ["availability-exceptions", format(currentMonth, "yyyy-MM")]
 
-  const { data: routineData, isLoading: loading } = useQuery({
+  const isEditableMonth = !isBefore(startOfMonth(currentMonth), startOfMonth(minDate))
+
+  const { data: routineData, isLoading: routineLoading } = useQuery({
     queryKey: routineKey,
     queryFn: () => fetchRoutineData(supabase),
   })
+
+  // Locked (past) months must show the routine the member had back then, not
+  // today's — only fetched once the member navigates to one.
+  const { data: routineHistory, isLoading: historyLoading } = useQuery({
+    queryKey: historyKey,
+    queryFn: () => fetchOwnRoutineHistory(supabase),
+    enabled: !isEditableMonth,
+  })
+
+  const loading = routineLoading || (!isEditableMonth && historyLoading)
 
   const { data: monthExceptions = [] } = useQuery({
     queryKey: monthKey,
@@ -98,7 +127,14 @@ export function useAvailability() {
   })
 
   const serviceDays = routineData?.serviceDays ?? []
-  const availability = routineData?.availability ?? []
+  const liveAvailability = routineData?.availability
+  const availability = useMemo<AvailabilityRoutine[]>(
+    () =>
+      isEditableMonth
+        ? (liveAvailability ?? [])
+        : getRoutineForMonth(routineHistory ?? [], currentMonth),
+    [isEditableMonth, liveAvailability, routineHistory, currentMonth]
+  )
 
   const expandedCalendar = useMemo<ExpandedCalendarItem[]>(
     () => buildMonthAvailability(currentMonth, serviceDays, availability, monthExceptions),
@@ -170,6 +206,7 @@ export function useAvailability() {
     },
     onSettled: (_data, _error, { serviceDayId }) => {
       queryClient.invalidateQueries({ queryKey: routineKey })
+      queryClient.invalidateQueries({ queryKey: historyKey })
       queryClient.invalidateQueries({ queryKey: ["availability-exceptions"] })
       setSaving((prev) => ({ ...prev, [serviceDayId]: false }))
     },
@@ -224,8 +261,6 @@ export function useAvailability() {
 
   const handlePrevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
   const handleNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
-
-  const isEditableMonth = !isBefore(startOfMonth(currentMonth), startOfMonth(minDate))
 
   return {
     currentMonth,

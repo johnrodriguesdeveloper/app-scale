@@ -6,7 +6,9 @@ import { eachDayOfInterval, endOfMonth, format, getDay, startOfMonth, subMonths 
 import { createClient } from "@/lib/supabase/client"
 import { getDepartmentSubtreeIds, isLeaderOfDepartmentChain } from "@/features/departments/departmentLeadership"
 import { buildMonthAvailability } from "@/features/availability/buildMonthAvailability"
-import type { ExpandedCalendarItem } from "@/types/availability"
+import { fetchRoutineHistory, getRoutineForMonth } from "@/features/availability/routineHistory"
+import { getMonthEditDeadline } from "@/utils/getTargetMonthDate"
+import type { AvailabilityRoutine, AvailabilityRoutineHistoryEntry, ExpandedCalendarItem } from "@/types/availability"
 import type { ServiceDay } from "@/types/schedule"
 import type { ReportMonth, VolunteerReportRow } from "@/types/department-report"
 
@@ -31,19 +33,13 @@ interface AvailabilityExceptionEntry {
   is_available: boolean | null
 }
 
-interface RegularAvailabilityEntry {
-  user_id: string
-  service_day_id: string
-  is_available: boolean | null
-}
-
 interface ReportData {
   isLeader: boolean
   serviceDays: ServiceDay[]
   members: ReportMember[]
   rosters: RosterEntry[]
   availabilityExceptions: AvailabilityExceptionEntry[]
-  regularAvailabilities: RegularAvailabilityEntry[]
+  routineHistory: AvailabilityRoutineHistoryEntry[]
 }
 
 const EMPTY_REPORT_DATA: ReportData = {
@@ -52,7 +48,7 @@ const EMPTY_REPORT_DATA: ReportData = {
   members: [],
   rosters: [],
   availabilityExceptions: [],
-  regularAvailabilities: [],
+  routineHistory: [],
 }
 
 async function fetchIsLeader(
@@ -92,7 +88,7 @@ async function fetchReportData(
   const startStr = format(rangeStart, "yyyy-MM-dd")
   const endStr = format(rangeEnd, "yyyy-MM-dd")
 
-  const [serviceDaysRes, departmentsRes, membersRes, rostersRes, exceptionsRes, routineRes] = await Promise.all([
+  const [serviceDaysRes, departmentsRes, membersRes, rostersRes, exceptionsRes] = await Promise.all([
     supabase.from("service_days").select("*").order("day_of_week"),
     supabase.from("departments").select("id, name").in("id", subtreeIds),
     supabase
@@ -110,7 +106,6 @@ async function fetchReportData(
       .select("user_id, service_day_id, specific_date, is_available")
       .gte("specific_date", startStr)
       .lte("specific_date", endStr),
-    supabase.from("availability_routine").select("user_id, service_day_id, is_available"),
   ])
 
   const departmentNameById = new Map((departmentsRes.data ?? []).map((d) => [d.id as string, d.name as string]))
@@ -129,35 +124,31 @@ async function fetchReportData(
     department_name: departmentNameById.get(m.department_id) || "",
   }))
 
+  // Each month is evaluated with the routine as of its edit deadline (see
+  // getRoutineForMonth), so history after the newest month's deadline is
+  // never needed. Fetched for every member in the report (paginated).
+  const userIds = [...new Set(members.map((m) => m.user_id))]
+  const latestDeadline = getMonthEditDeadline(months[0].date)
+  const routineHistory = await fetchRoutineHistory(supabase, userIds, latestDeadline)
+
   return {
     isLeader: true,
     serviceDays: serviceDaysRes.data || [],
     members,
     rosters: rostersRes.data || [],
     availabilityExceptions: exceptionsRes.data || [],
-    regularAvailabilities: routineRes.data || [],
+    routineHistory,
   }
 }
 
-function isAvailableForService(
-  userId: string,
-  dateStr: string,
-  serviceId: string,
-  exceptions: AvailabilityExceptionEntry[],
-  routine: RegularAvailabilityEntry[]
-): boolean {
-  const exception = exceptions.find(
-    (e) =>
-      e.user_id === userId &&
-      e.specific_date?.startsWith(dateStr) &&
-      (!e.service_day_id || e.service_day_id === serviceId)
-  )
-  if (exception) return exception.is_available ?? false
-
-  const regular = routine.find((r) => r.user_id === userId && r.service_day_id === serviceId)
-  if (regular) return regular.is_available ?? false
-
-  return true
+function groupByUser<T extends { user_id: string }>(rows: T[]): Map<string, T[]> {
+  const byUser = new Map<string, T[]>()
+  rows.forEach((row) => {
+    const list = byUser.get(row.user_id)
+    if (list) list.push(row)
+    else byUser.set(row.user_id, [row])
+  })
+  return byUser
 }
 
 export function useDepartmentReport(departmentId: string | undefined) {
@@ -179,12 +170,30 @@ export function useDepartmentReport(departmentId: string | undefined) {
     enabled: !!departmentId,
   })
 
+  // Per user, and per month the routine that was in effect for that month.
+  const { exceptionsByUser, routineByMonthAndUser } = useMemo(() => {
+    const exceptionsByUser = groupByUser(data?.availabilityExceptions ?? [])
+    const routineByMonthAndUser = new Map<string, Map<string, AvailabilityRoutine[]>>()
+    months.forEach((month) => {
+      routineByMonthAndUser.set(month.key, groupByUser(getRoutineForMonth(data?.routineHistory ?? [], month.date)))
+    })
+    return { exceptionsByUser, routineByMonthAndUser }
+  }, [data, months])
+
+  const buildMemberMonth = (userId: string, month: ReportMonth): ExpandedCalendarItem[] => {
+    if (!data) return []
+    const routine = routineByMonthAndUser.get(month.key)?.get(userId) ?? []
+    const exceptions = exceptionsByUser.get(userId) ?? []
+    return buildMonthAvailability(month.date, data.serviceDays, routine, exceptions)
+  }
+
   const { rowsByMonth, servicesCountByMonth } = useMemo(() => {
     const rowsByMonth = new Map<string, VolunteerReportRow[]>()
     const servicesCountByMonth = new Map<string, number>()
     if (!data) return { rowsByMonth, servicesCountByMonth }
 
     months.forEach((month) => {
+      const routineByUser = routineByMonthAndUser.get(month.key)
       const start = startOfMonth(month.date)
       const end = endOfMonth(month.date)
       const startStr = format(start, "yyyy-MM-dd")
@@ -204,15 +213,12 @@ export function useDepartmentReport(departmentId: string | undefined) {
       servicesCountByMonth.set(month.key, servicesInMonth.length)
 
       const rows: VolunteerReportRow[] = data.members.map((member) => {
-        const timesAvailable = servicesInMonth.filter(({ dateStr, service }) =>
-          isAvailableForService(
-            member.user_id,
-            dateStr,
-            service.id,
-            data.availabilityExceptions,
-            data.regularAvailabilities
-          )
-        ).length
+        const timesAvailable = buildMonthAvailability(
+          month.date,
+          data.serviceDays,
+          routineByUser?.get(member.user_id) ?? [],
+          exceptionsByUser.get(member.user_id) ?? []
+        ).filter((item) => item.isAvailable).length
 
         const timesScheduled = data.rosters.filter(
           (r) => r.member_id === member.id && r.schedule_date >= startStr && r.schedule_date <= endStr
@@ -236,7 +242,7 @@ export function useDepartmentReport(departmentId: string | undefined) {
     })
 
     return { rowsByMonth, servicesCountByMonth }
-  }, [data, months])
+  }, [data, months, exceptionsByUser, routineByMonthAndUser])
 
   return {
     loading,
@@ -247,12 +253,9 @@ export function useDepartmentReport(departmentId: string | undefined) {
     getRowsForMonth: (key: string) => rowsByMonth.get(key) ?? [],
     getServicesCountForMonth: (key: string) => servicesCountByMonth.get(key) ?? 0,
     getDailyAvailabilityForMember: (userId: string, monthKey: string): ExpandedCalendarItem[] => {
-      if (!data) return []
       const month = months.find((m) => m.key === monthKey)
       if (!month) return []
-      const routine = data.regularAvailabilities.filter((r) => r.user_id === userId)
-      const exceptions = data.availabilityExceptions.filter((e) => e.user_id === userId)
-      return buildMonthAvailability(month.date, data.serviceDays, routine, exceptions)
+      return buildMemberMonth(userId, month)
     },
   }
 }

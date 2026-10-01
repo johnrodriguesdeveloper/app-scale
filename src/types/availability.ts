@@ -19,3 +19,15 @@ export interface ExpandedCalendarItem {
   isException: boolean
   key: string
 }
+
+/** One row of `availability_routine_history` (append-only log of routine changes). */
+export interface AvailabilityRoutineHistoryEntry {
+  id: number
+  user_id: string
+  service_day_id: string
+  is_available: boolean | null
+  /** The routine row was deleted from `valid_from` on (back to the default). */
+  is_deleted: boolean
+  /** ISO timestamp; the backfilled baseline rows use "-infinity". */
+  valid_from: string
+}
