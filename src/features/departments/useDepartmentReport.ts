@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query"
 import { eachDayOfInterval, endOfMonth, format, getDay, startOfMonth, subMonths } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import { getDepartmentSubtreeIds, isLeaderOfDepartmentChain } from "@/features/departments/departmentLeadership"
+import { buildMonthAvailability } from "@/features/availability/buildMonthAvailability"
+import type { ExpandedCalendarItem } from "@/types/availability"
 import type { ServiceDay } from "@/types/schedule"
 import type { ReportMonth, VolunteerReportRow } from "@/types/department-report"
 
@@ -244,5 +246,13 @@ export function useDepartmentReport(departmentId: string | undefined) {
     setSelectedMonthKey,
     getRowsForMonth: (key: string) => rowsByMonth.get(key) ?? [],
     getServicesCountForMonth: (key: string) => servicesCountByMonth.get(key) ?? 0,
+    getDailyAvailabilityForMember: (userId: string, monthKey: string): ExpandedCalendarItem[] => {
+      if (!data) return []
+      const month = months.find((m) => m.key === monthKey)
+      if (!month) return []
+      const routine = data.regularAvailabilities.filter((r) => r.user_id === userId)
+      const exceptions = data.availabilityExceptions.filter((e) => e.user_id === userId)
+      return buildMonthAvailability(month.date, data.serviceDays, routine, exceptions)
+    },
   }
 }

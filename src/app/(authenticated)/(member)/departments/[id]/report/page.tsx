@@ -6,6 +6,7 @@ import { ArrowLeft, CalendarClock, Loader2, Search, ShieldAlert } from "lucide-r
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { createClient } from "@/lib/supabase/client"
+import { cn } from "@/lib/utils"
 import { useDepartmentReport } from "@/features/departments/useDepartmentReport"
 
 type SortMode = "name" | "scheduled" | "available"
@@ -43,12 +44,14 @@ export default function DepartmentReportPage({ params }: { params: Promise<{ id:
     setSelectedMonthKey,
     getRowsForMonth,
     getServicesCountForMonth,
+    getDailyAvailabilityForMember,
   } = useDepartmentReport(departmentId)
 
   const selectedMonth = months.find((m) => m.key === selectedMonthKey) ?? null
 
   const [searchText, setSearchText] = useState("")
   const [sortMode, setSortMode] = useState<SortMode>("name")
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
 
   const displayedRows = useMemo(() => {
     if (!selectedMonth) return []
@@ -68,6 +71,12 @@ export default function DepartmentReportPage({ params }: { params: Promise<{ id:
 
     return sorted
   }, [selectedMonth, searchText, sortMode, getRowsForMonth])
+
+  const selectedMember = selectedMonth
+    ? displayedRows.find((row) => row.userId === selectedMemberId) ?? null
+    : null
+  const dailyAvailability =
+    selectedMember && selectedMonth ? getDailyAvailabilityForMember(selectedMember.userId, selectedMonth.key) : []
 
   if (loading) {
     return (
@@ -101,23 +110,87 @@ export default function DepartmentReportPage({ params }: { params: Promise<{ id:
     <div>
       <div className="flex items-center border-b border-border bg-card px-4 py-4">
         <button
-          onClick={() =>
-            selectedMonth ? setSelectedMonthKey(null) : router.push(`/departments/${departmentId}`)
-          }
+          onClick={() => {
+            if (selectedMemberId) {
+              setSelectedMemberId(null)
+            } else if (selectedMonth) {
+              setSelectedMonthKey(null)
+              setSelectedMemberId(null)
+            } else {
+              router.push(`/departments/${departmentId}`)
+            }
+          }}
           className="mr-4 rounded-lg bg-muted p-2"
         >
           <ArrowLeft className="size-5" />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold">{departmentName}</h1>
+          <h1 className="text-xl font-bold">{selectedMember ? selectedMember.fullName : departmentName}</h1>
           <p className="text-sm text-muted-foreground">
-            {selectedMonth ? "Relatório mensal" : "Relatório · últimos 6 meses"}
+            {selectedMember && selectedMonth ? (
+              <span className="capitalize">{format(selectedMonth.date, "MMMM yyyy", { locale: ptBR })}</span>
+            ) : selectedMonth ? (
+              "Relatório mensal"
+            ) : (
+              "Relatório · últimos 6 meses"
+            )}
           </p>
         </div>
       </div>
 
       <div className="p-4">
-        {!selectedMonth ? (
+        {selectedMember && selectedMonth ? (
+          <div>
+            <p className="mb-4 text-sm text-muted-foreground">
+              {selectedMember.timesAvailable}/{selectedMember.servicesInMonth} disponível ·{" "}
+              {selectedMember.timesScheduled}/{selectedMember.servicesInMonth} escalado
+            </p>
+            <div className="pb-4">
+              {dailyAvailability.map((item) => (
+                <div
+                  key={item.key}
+                  className={cn(
+                    "mb-3 flex items-center rounded-xl border bg-card p-3 shadow-sm",
+                    item.isAvailable ? "border-border" : "border-destructive/30 bg-destructive/10"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "mr-4 flex size-14 flex-col items-center justify-center rounded-lg",
+                      item.isAvailable ? "bg-muted" : "bg-destructive/10"
+                    )}
+                  >
+                    <p
+                      className={cn(
+                        "text-xs font-bold uppercase",
+                        item.isAvailable ? "text-muted-foreground" : "text-destructive"
+                      )}
+                    >
+                      {format(item.date, "EEE", { locale: ptBR })}
+                    </p>
+                    <p className={cn("text-xl font-bold", !item.isAvailable && "text-destructive")}>
+                      {format(item.date, "dd")}
+                    </p>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-base font-semibold">{item.service.name}</p>
+                    <p
+                      className={cn(
+                        "text-xs font-medium",
+                        item.isAvailable ? "text-success" : "text-destructive"
+                      )}
+                    >
+                      {item.isAvailable ? "Disponível" : "Indisponível"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {dailyAvailability.length === 0 && (
+                <p className="mt-4 text-center text-muted-foreground">Nenhum evento neste mês.</p>
+              )}
+            </div>
+          </div>
+        ) : !selectedMonth ? (
           <div className="flex flex-col gap-3">
             {months.map((month) => (
               <button
@@ -189,7 +262,11 @@ export default function DepartmentReportPage({ params }: { params: Promise<{ id:
                     {displayedRows.map((row, index, arr) => (
                       <tr
                         key={row.memberId}
-                        className={index !== arr.length - 1 ? "border-b border-border" : ""}
+                        onClick={() => setSelectedMemberId(row.userId)}
+                        className={cn(
+                          "cursor-pointer hover:bg-muted/40",
+                          index !== arr.length - 1 && "border-b border-border"
+                        )}
                       >
                         <td className="p-3 font-medium">{row.fullName}</td>
                         <td className="p-3 text-muted-foreground">{row.departmentName}</td>
