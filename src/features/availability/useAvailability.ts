@@ -4,17 +4,17 @@ import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   addMonths,
-  eachDayOfInterval,
   endOfMonth,
   format,
   getDate,
   getDay,
-  isSameDay,
+  isBefore,
   parse,
   startOfMonth,
   subMonths,
 } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
+import { buildMonthAvailability } from "@/features/availability/buildMonthAvailability"
 import { getTargetMonthDate } from "@/utils/getTargetMonthDate"
 import type { AvailabilityException, AvailabilityRoutine, ExpandedCalendarItem } from "@/types/availability"
 import type { ServiceDay } from "@/types/schedule"
@@ -100,42 +100,10 @@ export function useAvailability() {
   const serviceDays = routineData?.serviceDays ?? []
   const availability = routineData?.availability ?? []
 
-  const expandedCalendar = useMemo<ExpandedCalendarItem[]>(() => {
-    if (serviceDays.length === 0) return []
-
-    const start = startOfMonth(currentMonth)
-    const end = endOfMonth(currentMonth)
-    const daysInterval = eachDayOfInterval({ start, end })
-    const calendarItems: ExpandedCalendarItem[] = []
-
-    daysInterval.forEach((date) => {
-      const dayOfWeek = getDay(date)
-      const daysServices = serviceDays.filter((s) => s.day_of_week === dayOfWeek)
-
-      daysServices.forEach((service) => {
-        const routine = availability.find((r) => r.service_day_id === service.id)
-        const isRoutineAvailable = routine ? routine.is_available !== false : true
-
-        const dateStr = format(date, "yyyy-MM-dd")
-        const exception = monthExceptions.find(
-          (e) => e.specific_date === dateStr && (e.service_day_id === service.id || e.service_day_id === null)
-        )
-
-        const finalStatus = exception ? exception.is_available !== false : isRoutineAvailable
-
-        calendarItems.push({
-          date,
-          dateStr,
-          service,
-          isAvailable: finalStatus,
-          isException: !!exception,
-          key: `${dateStr}-${service.id}`,
-        })
-      })
-    })
-
-    return calendarItems
-  }, [availability, monthExceptions, currentMonth, serviceDays])
+  const expandedCalendar = useMemo<ExpandedCalendarItem[]>(
+    () => buildMonthAvailability(currentMonth, serviceDays, availability, monthExceptions),
+    [availability, monthExceptions, currentMonth, serviceDays]
+  )
 
   const toggleRoutineMutation = useMutation({
     mutationFn: async ({ serviceDayId, value }: { serviceDayId: string; value: boolean }) => {
@@ -257,6 +225,8 @@ export function useAvailability() {
   const handlePrevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
   const handleNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
 
+  const isEditableMonth = !isBefore(startOfMonth(currentMonth), startOfMonth(minDate))
+
   return {
     currentMonth,
     serviceDays,
@@ -264,7 +234,7 @@ export function useAvailability() {
     expandedCalendar,
     loading,
     saving,
-    isAtMinDate: isSameDay(startOfMonth(currentMonth), minDate),
+    isEditableMonth,
     dayOfMonth: getDate(new Date()),
     handlePrevMonth,
     handleNextMonth,

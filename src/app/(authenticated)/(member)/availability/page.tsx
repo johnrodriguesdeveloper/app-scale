@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, Info, Loader2 } from "lucide-react"
+import { AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, Info, Loader2, Lock } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { Switch } from "@/components/ui/switch"
@@ -18,7 +18,7 @@ export default function AvailabilityPage() {
     expandedCalendar,
     loading,
     saving,
-    isAtMinDate,
+    isEditableMonth,
     dayOfMonth,
     handlePrevMonth,
     handleNextMonth,
@@ -57,12 +57,21 @@ export default function AvailabilityPage() {
           </div>
         )}
 
-        <div className="mb-6 flex items-center justify-center gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3">
-          <AlertCircle className="size-4 text-warning" />
-          <p className="text-xs font-medium text-warning">
-            Ajustes abaixo sobrepõem a rotina padrão.
-          </p>
-        </div>
+        {isEditableMonth ? (
+          <div className="mb-6 flex items-center justify-center gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3">
+            <AlertCircle className="size-4 text-warning" />
+            <p className="text-xs font-medium text-warning">
+              Ajustes abaixo sobrepõem a rotina padrão.
+            </p>
+          </div>
+        ) : (
+          <div className="mb-6 flex items-center justify-center gap-2 rounded-xl border border-border bg-muted p-3">
+            <Lock className="size-4 text-muted-foreground" />
+            <p className="text-xs font-medium text-muted-foreground">
+              Você está vendo um mês passado — somente leitura.
+            </p>
+          </div>
+        )}
 
         <h2 className="mb-3 text-lg font-bold">Rotina Semanal (Padrão)</h2>
         <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
@@ -81,18 +90,18 @@ export default function AvailabilityPage() {
                   <p className="text-base font-bold">{fullDayNames[day.day_of_week]}</p>
                   <p className="text-sm text-muted-foreground">{day.name}</p>
                 </div>
-                <Switch checked={isOn} onCheckedChange={(val) => handleToggleRoutine(day.id, val)} />
+                <Switch
+                  checked={isOn}
+                  disabled={!isEditableMonth}
+                  onCheckedChange={(val) => handleToggleRoutine(day.id, val)}
+                />
               </div>
             )
           })}
         </div>
 
         <div className="mb-4 mt-2 flex items-center justify-between">
-          <button
-            disabled={isAtMinDate}
-            onClick={handlePrevMonth}
-            className={cn("rounded-full bg-muted p-2", isAtMinDate && "opacity-30")}
-          >
+          <button onClick={handlePrevMonth} className="rounded-full bg-muted p-2">
             <ChevronLeft className="size-5" />
           </button>
           <p className="text-lg font-bold capitalize">
@@ -145,12 +154,12 @@ export default function AvailabilityPage() {
 
               {saving[item.key] ? (
                 <Loader2 className="size-4 animate-spin text-primary" />
-              ) : (
+              ) : isEditableMonth ? (
                 <Switch
                   checked={item.isAvailable}
                   onCheckedChange={(val) => handleToggleException(item, val)}
                 />
-              )}
+              ) : null}
             </div>
           ))}
 
