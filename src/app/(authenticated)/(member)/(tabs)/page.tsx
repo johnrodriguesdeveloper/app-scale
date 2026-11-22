@@ -3,6 +3,7 @@ import { Calendar, ChevronRight, Clock, MapPin } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { createClient } from "@/lib/supabase/server"
+import { getTodayDateStr } from "@/lib/today"
 import { NotificationShortcut } from "@/components/nav/notification-shortcut"
 import { BirthdayCard } from "@/components/home/birthday-card"
 import { MemberAvatar } from "@/components/MemberAvatar"
@@ -38,7 +39,7 @@ export default async function HomePage() {
     .eq("user_id", user!.id)
 
   const memberIds = (memberRecords ?? []).map((m) => m.id).filter((id): id is string => !!id)
-  const today = new Date().toISOString().split("T")[0]
+  const today = getTodayDateStr()
 
   const { data: nextScale } = memberIds.length
     ? await supabase
@@ -51,7 +52,7 @@ export default async function HomePage() {
         .maybeSingle()
     : { data: null }
 
-  const monthDay = format(new Date(), "MM-dd")
+  const monthDay = today.slice(5)
 
   const { data: orgProfiles } = profile?.organization_id
     ? await supabase
